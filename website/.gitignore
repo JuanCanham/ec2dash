@@ -1,0 +1,7 @@
+dist/*
+bin/*
+node_modules/
+test-results.xml
+coverage
+.nyc_output
+src/*.js

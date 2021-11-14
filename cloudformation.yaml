@@ -1,0 +1,252 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Api & Side For describing EC2 instance info
+
+Parameters:
+  Domain:
+    Type: String
+    AllowedPattern: '[a-zA-Z0-9-.]{1,63}'
+  DeployCertificates:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+Conditions:
+  DeployCertificates: !Equals [!Ref DeployCertificates, 'true']
+
+Resources:
+  Api:
+    Condition: DeployCertificates
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      FailOnWarnings: true
+      AccessLogSettings: 
+        DestinationArn: !GetAtt ApiAccessLogs.Arn
+        Format: $context.requestId,$context.requestTime,$context.resourcePath,$context.identity.caller,$context.identity.sourceIp
+      Domain: 
+        CertificateArn: !Ref ApiCertificate
+        DomainName: !Sub 'api.${Domain}'
+        Route53:
+          HostedZoneId: !Ref HostedZone
+          IpV6: true
+      CorsConfiguration:
+        AllowMethods:
+          - GET
+        AllowOrigins:
+          - !Sub https://${Domain}
+      Auth:
+        Authorizers:
+          JwtAuthorizer:
+            IdentitySource: $request.querystring.param
+            JwtConfiguration:
+              issuer: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
+              audience:
+               - !Ref UserPoolClient
+
+  ApiAccessLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 90
+
+  ApiCertificate:
+    Condition: DeployCertificates
+    DependsOn: CAARecords
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Sub api.${Domain}
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Sub api.${Domain}
+          HostedZoneId: !Ref HostedZone
+
+  RootCertificate:
+    Condition: DeployCertificates
+    DependsOn: CAARecords
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref Domain
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref Domain
+          HostedZoneId: !Ref HostedZone
+
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref Domain
+
+  CAARecords:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZone
+      Name: !Ref Domain
+      Type: CAA
+      TTL: 3600
+      ResourceRecords:
+        - 0 issue "amazon.com"
+        - 0 issue "amazontrust.com"
+        - 0 issue "awstrust.com"
+        - 0 issue "amazonaws.com"
+        - 0 issue ";"
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties: 
+      Policies:
+        PasswordPolicy:
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          RequireUppercase: true
+          MinimumLength: 8
+      UserPoolAddOns:
+        AdvancedSecurityMode: AUDIT
+      MfaConfiguration: OPTIONAL
+      EnabledMfas:
+        - SOFTWARE_TOKEN_MFA
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties: 
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows:
+        - implicit
+      AllowedOAuthScopes: 
+        - aws.cognito.signin.user.admin
+        - openid
+        - email
+      UserPoolId: !Ref UserPool
+      PreventUserExistenceErrors: ENABLED
+      GenerateSecret: true
+      CallbackURLs: 
+        - !Sub https://${Domain}
+      LogoutURLs:
+        - !Sub https://${Domain}
+      SupportedIdentityProviders:
+        - COGNITO
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties: 
+      Domain: !Select [0, !Split [., !Ref Domain]]
+      UserPoolId: !Ref UserPool
+
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref Domain
+
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref Bucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: GetOriginAccessIdentity
+            Effect: Allow
+            Principal: 
+              AWS: !Sub arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity ${OriginAccessIdentity}
+            Action: s3:GetObject
+            Resource: !Sub '${Bucket.Arn}/*'
+
+  Route53RecordIPv4:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt CloudfrontDistribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2
+      HostedZoneId: !Ref HostedZone
+      Name: !Ref Domain
+      Type: A
+
+  Route53RecordIPv6:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt CloudfrontDistribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2
+      HostedZoneId: !Ref HostedZone
+      Name: !Ref Domain
+      Type: AAAA
+
+  CloudfrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Aliases: !If [DeployCertificates, [!Ref Domain], !Ref AWS::NoValue]
+        Enabled: true
+        IPV6Enabled: true
+        PriceClass: PriceClass_100
+        ViewerCertificate: !If 
+          - DeployCertificates
+          - AcmCertificateArn: !Ref RootCertificate
+            SslSupportMethod: sni-only
+          - !Ref AWS::NoValue
+        Origins:
+          - Id: s3origin
+            DomainName: !GetAtt Bucket.DomainName
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub origin-access-identity/cloudfront/${OriginAccessIdentity}
+        DefaultRootObject: index.html
+        DefaultCacheBehavior:
+          DefaultTTL: 1
+          TargetOriginId: s3origin
+          ViewerProtocolPolicy: allow-all
+          Compress: True
+          ForwardedValues:
+            QueryString: False
+
+  OriginAccessIdentity:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: !Sub OriginAccessIdentity for ${Domain}
+
+  DescribeInstancesFunction:
+    Condition: DeployCertificates
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: python3.9
+      Handler: main.main
+      InlineCode: |
+        def main(event, context):
+          msg = "Build template with make all, package or package-cfn"
+          print(msg)
+          print(f"invoked with ${event} ${context}")
+          return {
+            "statusCode": 500, 
+            "body": msg
+          }
+      Events:
+        HttpApi: 
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Method: GET
+            Path: / 
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: '*'
+            - Effect: Allow
+              Action: ec2:DescribeInstances
+              Resource: '*'
+
+Outputs:
+  ApiId:
+    Condition: DeployCertificates
+    Value: !Ref Api
+  SiteDistributionId:
+    Value: !Ref CloudfrontDistribution
+  UserPoolId:
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
+  NameServers:
+    Value: !Join ["," , !GetAtt HostedZone.NameServers]

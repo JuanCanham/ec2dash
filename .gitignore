@@ -1,0 +1,5 @@
+*/dist/*
+**/*.pyc
+packaged-cloudformation.yaml
+*.log
+*.coverage

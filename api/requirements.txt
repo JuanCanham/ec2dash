@@ -1,0 +1,9 @@
+awscli==1.*
+pylint==2.*
+black==21.9b0
+cfn-lint==0.56.*
+cfn-flip==1.2.*
+yq==2.12.*
+pytest==6.2.*
+pytest-cov==3.0.*
+mypy==0.910
