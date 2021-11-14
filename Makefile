@@ -27,8 +27,7 @@ clean-cfn:
 	rm -f packaged-cloudformation.yaml
 
 clean-website:
-	cd website
-	npm run clean
+	cd website && npm run clean
 
 install: install-api install-website
 

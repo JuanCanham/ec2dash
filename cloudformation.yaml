@@ -30,14 +30,18 @@ Resources:
           HostedZoneId: !Ref HostedZone
           IpV6: true
       CorsConfiguration:
+        AllowCredentials: true
+        AllowHeaders:
+          - Authorization
         AllowMethods:
           - GET
         AllowOrigins:
           - !Sub https://${Domain}
       Auth:
+        DefaultAuthorizer: JwtAuthorizer
         Authorizers:
           JwtAuthorizer:
-            IdentitySource: $request.querystring.param
+            IdentitySource: $request.header.Authorization
             JwtConfiguration:
               issuer: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
               audience:

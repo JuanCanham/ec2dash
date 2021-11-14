@@ -5,7 +5,7 @@ from behave import then
 @then("API returns an authentication error")
 def step_impl(context):
     res = requests.get(context.api)
-    # assert 500 > res.status_code >= 400
+    assert 500 > res.status_code >= 400
 
 
 @then("API returns an valid data")
@@ -24,7 +24,10 @@ def step_impl(context, state):
 
 
 def get_instances(context):
-    res = requests.get(context.api)
+    authorization = context.webdriver.execute_script(
+        'return localStorage.getItem("Authorization")'
+    )
+    res = requests.get(context.api, headers={"Authorization": authorization})
     assert res.status_code == 200
     json = res.json()
     assert "Instances" in json

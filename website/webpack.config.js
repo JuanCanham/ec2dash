@@ -2,6 +2,7 @@ const webpack = require('webpack');
 const path = require('path');
 
 module.exports = () => ({
+  mode: process.env.WEBPACK_MODE || 'production',
   entry: './bin/index.js',
   output: {
     filename: 'index.js',

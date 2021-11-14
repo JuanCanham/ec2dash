@@ -3,3 +3,4 @@
 packaged-cloudformation.yaml
 *.log
 *.coverage
+.venv/*

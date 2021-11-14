@@ -27,10 +27,7 @@ def step_impl(context):
 def step_impl(context):
     context.instance_id = get_instance_id(context)
     instance = context.ec2.Instance(context.instance_id)
-    try:
-        instance.start()
-    except Exception:
-        "ignore this as it's likely already running"
+    instance.start()
     instance.wait_until_running()
 
 
@@ -59,5 +56,4 @@ def get_instance_id(context):
         for out in describe_response["Stacks"][0]["Outputs"]
         if out["OutputKey"] == "InstanceId"
     ][0]
-    print(f"Found instance ({instance_id})")
     return instance_id

@@ -24,11 +24,17 @@ const dataTable: DataTable = {
   Instances: [],
   PageSize: 10,
 };
-const auth: { [key: string]: string } = {};
 
 const setLoggedInElementsVisibility = (authenticated: boolean) => {
   document.getElementById('dataView').hidden = !authenticated;
   document.getElementById('loginLink').hidden = authenticated;
+};
+
+const logout = () => {
+  setLoggedInElementsVisibility(false);
+  page = 0;
+  dataTable.Instances = [];
+  localStorage.removeItem('Authorization');
 };
 
 const generateInstanceRow = (inst: Instance): string => `<tr>
@@ -59,12 +65,14 @@ const loadTableData = async (NextToken?: string) => {
     last.innerHTML = `<a class="page-link" href="#">${page + 1}</a>`;
     document.getElementById('page-bar').insertBefore(next, last);
   }
-  fetch(url)
+  fetch(url, {
+    headers: [['Authorization', localStorage.getItem('Authorization')]],
+  })
     .then((response) => {
       if (!response.ok) {
         if (response.status >= 400 && response.status < 500) {
-          setLoggedInElementsVisibility(false);
-          throw new Error(
+          logout();
+          console.warn(
             `Cannot get data as not logged in: ${response.status}`,
           );
         }
@@ -74,6 +82,7 @@ const loadTableData = async (NextToken?: string) => {
     })
     .then((body: ApiResponse) => {
       try {
+        setLoggedInElementsVisibility(true);
         if ('NextToken' in body) {
           dataTable.NextToken = body.NextToken;
         } else {
@@ -91,15 +100,15 @@ const loadTableData = async (NextToken?: string) => {
     });
 };
 
-const tryLogin = async (authString: string) => {
-  authString.slice(1).split('&').forEach((ent) => {
-    const [key, value] = ent.split('=');
-    auth[key] = value;
-  });
-  // Clear credentials from location to prevent leaks
+const readCredentials = async (authString: string) => {
+  if (authString.includes('id_token')) {
+    localStorage.setItem(
+      'Authorization',
+      authString.split('id_token=')[1].split('&')[0],
+    );
+    setLoggedInElementsVisibility(true);
+  }
   window.location.hash = '';
-  setLoggedInElementsVisibility(true);
-  await loadTableData();
 };
 
 const setLoginLink = () => {
@@ -107,10 +116,9 @@ const setLoginLink = () => {
 };
 
 const onLoad = async () => {
-  if (window.location.hash.length > 1) {
-    await tryLogin(window.location.hash);
-  }
   setLoginLink();
+  await readCredentials(window.location.hash);
+  await loadTableData();
 };
 
 const reloadData = async () => {
@@ -118,13 +126,6 @@ const reloadData = async () => {
   dataTable.Instances = [];
   document.getElementById('dataTbody').innerHTML = '';
   await loadTableData();
-};
-
-const logout = () => {
-  setLoggedInElementsVisibility(false);
-  page = 0;
-  dataTable.Instances = [];
-  Object.keys(auth).forEach((key) => delete auth[key]);
 };
 
 if (typeof window !== 'undefined') {
@@ -140,7 +141,7 @@ export {
   displayInstances,
   loadTableData,
   onLoad,
-  tryLogin,
+  readCredentials,
   DataTable,
   ApiResponse,
 };

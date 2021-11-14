@@ -11,9 +11,10 @@ import {
   ApiResponse,
   loadTableData,
   reloadData,
+  readCredentials,
 } from '../src/index';
 
-const { JSDOM } = require('jsdom');
+const jsdon = require('jsdom');
 
 chai.use(chaiAsPromised);
 
@@ -27,8 +28,7 @@ describe('index tests', () => {
   let loadTableDataMock: SinonStub<any>;
 
   before(() => {
-    loadTableDataMock = ImportMock.mockFunction(index, 'loadTableData');
-
+    const { JSDOM } = jsdon;
     global.window = new JSDOM(`<!DOCTYPE html>
       <body>
         <a id="loginLink">Login</a>
@@ -54,7 +54,6 @@ describe('index tests', () => {
   });
 
   beforeEach(() => {
-    loadTableDataMock.resetHistory();
     apiResponse = {
       Instances: [
         {
@@ -98,8 +97,7 @@ describe('index tests', () => {
   });
 
   after(() => {
-    loadTableDataMock.restore();
-    delete process.env.LOGIN_URL;
+    delete process.env.API_DOMAIN;
     delete process.env.LOGIN_URL;
   });
 
@@ -137,21 +135,21 @@ describe('index tests', () => {
   it('loadTableData handles access denied', async () => {
     fetchStub.resolves({ ok: false, status: 401 });
     setLoggedInElementsVisibility(true);
+    localStorage.setItem('Authorization', 'Hunter1');
 
     await loadTableData();
 
-    expect(loginLink.hidden).eq(true);
+    expect(localStorage.getItem('Authorization')).eq(null);
   });
 
   it('onLoad sets login link when no hash', async () => {
-    window.location.hash = '';
-
     await onLoad();
 
     expect(loginLink.getAttribute('href')).eq('https://cognito');
   });
 
   it('onLoad shows data when hash', async () => {
+    loadTableDataMock = ImportMock.mockFunction(index, 'loadTableData');
     fetchStub.resolves({ ok: true, json: () => apiResponse });
     window.location.hash = '#id=myId';
 
@@ -160,18 +158,41 @@ describe('index tests', () => {
     expect(window.location.hash).eq('');
     expect(dataView.hidden).eq(false);
     expect(loginLink.hidden).eq(true);
+    loadTableDataMock.restore();
   });
 
-  it('reloadData works as expected', async () => {
-    fetchStub.resolves({ ok: true, json: () => apiResponse });
-    dataTbody.innerHTML = '';
-    await reloadData();
-    expect(dataTbody.innerHTML).eq(expectedTableBody);
+  [
+    ['#id_token=mytoken', 'mytoken'],
+    ['', 'Hunter1'],
+  ].forEach(([input, expected]) => {
+    it('readCredentials works as expected', async () => {
+      localStorage.setItem('Authorization', 'Hunter1');
+
+      readCredentials(input);
+
+      expect(localStorage.getItem('Authorization')).eq(expected);
+    });
   });
 
   it('logout works as expected', async () => {
+    localStorage.setItem('Authorization', 'Hunter1');
+
     logout();
+
     expect(dataView.hidden).eq(true);
     expect(loginLink.hidden).eq(false);
+    expect(localStorage.length).eq(0);
+    expect(localStorage.getItem('Authorization')).eq(null);
+  });
+
+  it('reloadData works as expected', async () => {
+    loadTableDataMock = ImportMock.mockFunction(index, 'loadTableData');
+    fetchStub.resolves({ ok: true, json: () => apiResponse });
+    dataTbody.innerHTML = '';
+
+    await reloadData();
+
+    expect(dataTbody.innerHTML).eq(expectedTableBody);
+    loadTableDataMock.restore();
   });
 });

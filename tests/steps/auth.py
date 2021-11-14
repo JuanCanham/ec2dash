@@ -15,7 +15,6 @@ def step_impl(context):
     context.webdriver.find_element_by_name("username").send_keys(context.user_name)
     context.webdriver.find_element_by_name("password").send_keys(context.password)
     context.webdriver.find_element_by_name("signUpButton").click()
-    time.sleep(2)
 
 
 @then("the user cannot sign in")
@@ -73,19 +72,20 @@ def attempt_signin(context):
     ]
     if login_buttons:
         login_buttons[0].click()
-        return
-    [
-        e.send_keys(context.user_name)
-        for e in context.webdriver.find_elements_by_id("signInFormUsername")
-        if e.is_displayed()
-    ]
-    [
-        e.send_keys(context.password)
-        for e in context.webdriver.find_elements_by_id("signInFormPassword")
-        if e.is_displayed()
-    ]
-    [
-        e.click()
-        for e in context.webdriver.find_elements_by_name("signInSubmitButton")
-        if e.is_displayed()
-    ]
+    else:
+        [
+            e.send_keys(context.user_name)
+            for e in context.webdriver.find_elements_by_id("signInFormUsername")
+            if e.is_displayed()
+        ]
+        [
+            e.send_keys(context.password)
+            for e in context.webdriver.find_elements_by_id("signInFormPassword")
+            if e.is_displayed()
+        ]
+        [
+            e.click()
+            for e in context.webdriver.find_elements_by_name("signInSubmitButton")
+            if e.is_displayed()
+        ]
+    time.sleep(1)

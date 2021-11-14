@@ -1,4 +1,4 @@
-awscli==1.*
+awscli
 pylint==2.*
 black==21.9b0
 cfn-lint==0.56.*
@@ -7,3 +7,10 @@ yq==2.12.*
 pytest==6.2.*
 pytest-cov==3.0.*
 mypy==0.910
+aws-lambda-typing==2.8.*
+strip-hints==0.1.*
+behave==1.2.*
+boto==2.49.*
+boto3==1.18.*
+selenium==4.0.*
+requests==2.25.*
