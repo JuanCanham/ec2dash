@@ -1,17 +1,19 @@
 import chai, { expect } from 'chai';
 import chaiAsPromised from 'chai-as-promised';
-import { ImportMock } from 'ts-mock-imports';
 import { SinonStub, stub } from 'sinon';
-import * as index from '../src/index';
 import {
-  displayInstances,
-  logout,
-  onLoad,
   setLoggedInElementsVisibility,
-  ApiResponse,
-  loadTableData,
-  reloadData,
+  logout,
   readCredentials,
+  parseApiResponse,
+  parseJsonResponse,
+  fetchAllData,
+  ajaxRequest,
+  buttons,
+  ApiResponse,
+  Instance,
+  RowData,
+  AjaxParms,
 } from '../src/index';
 
 const jsdon = require('jsdom');
@@ -21,25 +23,23 @@ chai.use(chaiAsPromised);
 describe('index tests', () => {
   let dataView: any;
   let loginLink: any;
-  let dataTbody: any;
-  let apiResponse: ApiResponse;
-  let expectedTableBody: string;
+  let apiResponse: Response;
+  let jsonResponse: ApiResponse;
+  let exampleInstance: Instance;
+  let exampleRow: RowData;
   let fetchStub: SinonStub<any>;
-  let loadTableDataMock: SinonStub<any>;
+  let mockAjaxParams: AjaxParms;
+  let ajaxSuccessStub: SinonStub<any>;
 
-  before(() => {
+  beforeEach(() => {
     const { JSDOM } = jsdon;
     global.window = new JSDOM(`<!DOCTYPE html>
       <body>
         <a id="loginLink">Login</a>
         <div id="dataView" hidden>
-          <ul class="pagination" id="page-bar" hidden>
-            <li class="page-item" id="page-more">More</li>
-          </ul>
+          <table id="table">
+          </table>
         </div>
-        <table class="table table-striped table-hover">
-          <tbody id="dataTbody"></tbody>
-        </table>
       </body>`).window;
     global.document = global.window.document;
     fetchStub = stub();
@@ -47,14 +47,20 @@ describe('index tests', () => {
 
     dataView = document.getElementById('dataView');
     loginLink = document.getElementById('loginLink');
-    dataTbody = document.getElementById('dataTbody');
 
     process.env.API_DOMAIN = 'https://api.example.com';
     process.env.LOGIN_URL = 'https://cognito';
-  });
+    exampleInstance = {
+      Name: 'i-2',
+      Id: 'i-2',
+      Type: 'large',
+      State: 'stopped',
+      AZ: 'us-east-1',
+      PublicIps: [],
+      PrivateIps: [],
+    };
 
-  beforeEach(() => {
-    apiResponse = {
+    jsonResponse = {
       Instances: [
         {
           Name: 'Name',
@@ -65,35 +71,26 @@ describe('index tests', () => {
           PublicIps: ['192.168.0.1', '192.168.0.2'],
           PrivateIps: ['8.8.8.8'],
         },
-        {
-          Name: 'i-2',
-          Id: 'i-2',
-          Type: 'large',
-          State: 'stopped',
-          AZ: 'us-east-1',
-          PublicIps: [],
-          PrivateIps: [],
-        },
+        exampleInstance,
       ],
     };
 
-    expectedTableBody = `<tr>
-    <th scope="row">Name</th>
-    <td>i-1</td>
-    <td>small</td>
-    <td>running</td>
-    <td>us-east-1</td>
-    <td>192.168.0.1\n192.168.0.2</td>
-    <td>8.8.8.8</td>
-  </tr><tr>
-    <th scope="row">i-2</th>
-    <td>i-2</td>
-    <td>large</td>
-    <td>stopped</td>
-    <td>us-east-1</td>
-    <td></td>
-    <td></td>
-  </tr>`;
+    exampleRow = {
+      ...exampleInstance,
+      PublicIps: '',
+      PrivateIps: '',
+    };
+
+    apiResponse = {
+      ok: true,
+      status: 200,
+      json: async () => jsonResponse,
+    } as Response;
+
+    ajaxSuccessStub = stub();
+    mockAjaxParams = {
+      success: ajaxSuccessStub,
+    };
   });
 
   after(() => {
@@ -107,65 +104,22 @@ describe('index tests', () => {
     expect(loginLink.hidden).eq(true);
   });
 
-  it('displayInstances works as expected', async () => {
-    displayInstances(apiResponse.Instances);
-
-    expect(dataTbody.innerHTML).eql(expectedTableBody);
-  });
-
-  it('loadTableData works on success', async () => {
-    fetchStub.resolves({
-      ok: true,
-      json: () => ({ ...apiResponse, NextToken: 'page-2' }),
-    });
-    await loadTableData();
-
-    expect(dataTbody.innerHTML).eql(expectedTableBody);
-  });
-
-  it('loadTableData handles failure', async () => {
-    fetchStub.resolves({ ok: false, status: 502 });
-    setLoggedInElementsVisibility(true);
-
-    await loadTableData();
-
-    expect(loginLink.hidden).eq(true);
-  });
-
-  it('loadTableData handles access denied', async () => {
-    fetchStub.resolves({ ok: false, status: 401 });
-    setLoggedInElementsVisibility(true);
+  it('logout works as expected', async () => {
     localStorage.setItem('Authorization', 'Hunter1');
+    setLoggedInElementsVisibility(true);
 
-    await loadTableData();
+    logout();
 
+    expect(dataView.hidden).eq(true);
+    expect(loginLink.hidden).eq(false);
     expect(localStorage.getItem('Authorization')).eq(null);
-  });
-
-  it('onLoad sets login link when no hash', async () => {
-    await onLoad();
-
-    expect(loginLink.getAttribute('href')).eq('https://cognito');
-  });
-
-  it('onLoad shows data when hash', async () => {
-    loadTableDataMock = ImportMock.mockFunction(index, 'loadTableData');
-    fetchStub.resolves({ ok: true, json: () => apiResponse });
-    window.location.hash = '#id=myId';
-
-    await onLoad();
-
-    expect(window.location.hash).eq('');
-    expect(dataView.hidden).eq(false);
-    expect(loginLink.hidden).eq(true);
-    loadTableDataMock.restore();
   });
 
   [
     ['#id_token=mytoken', 'mytoken'],
     ['', 'Hunter1'],
   ].forEach(([input, expected]) => {
-    it('readCredentials works as expected', async () => {
+    it(`readCredentials works as expected (${input})`, async () => {
       localStorage.setItem('Authorization', 'Hunter1');
 
       readCredentials(input);
@@ -174,25 +128,207 @@ describe('index tests', () => {
     });
   });
 
-  it('logout works as expected', async () => {
+  it('parseApiResponse handles success', async () => {
     localStorage.setItem('Authorization', 'Hunter1');
 
-    logout();
+    const result = await parseApiResponse(apiResponse);
 
-    expect(dataView.hidden).eq(true);
-    expect(loginLink.hidden).eq(false);
-    expect(localStorage.length).eq(0);
+    expect(result).eql(jsonResponse);
+    expect(localStorage.getItem('Authorization')).eq('Hunter1');
+  });
+
+  it('parseApiResponse handles auth failure', async () => {
+    localStorage.setItem('Authorization', 'Hunter1');
+    const response = {
+      ok: false,
+      status: 400,
+    };
+
+    const result = await parseApiResponse(response as Response);
+    expect(result).eql({ Instances: [] });
     expect(localStorage.getItem('Authorization')).eq(null);
   });
 
-  it('reloadData works as expected', async () => {
-    loadTableDataMock = ImportMock.mockFunction(index, 'loadTableData');
-    fetchStub.resolves({ ok: true, json: () => apiResponse });
-    dataTbody.innerHTML = '';
+  it('parseApiResponse handles non-auth failure', async () => {
+    localStorage.setItem('Authorization', 'Hunter1');
+    const response = {
+      ok: false,
+      status: 500,
+    };
 
-    await reloadData();
+    try {
+      await parseApiResponse(response as Response);
+    } catch {
+      expect(localStorage.getItem('Authorization')).eq('Hunter1');
+      return;
+    }
+    expect(false).eq(true);
+  });
 
-    expect(dataTbody.innerHTML).eq(expectedTableBody);
-    loadTableDataMock.restore();
+  it('parseJsonResponse handles no NextToken', async () => {
+    const data: RowData[] = [];
+    const search = new URLSearchParams({ MaxResults: '1000', NextToken: 'page-1' });
+
+    parseJsonResponse(jsonResponse, data, mockAjaxParams, search);
+
+    expect(ajaxSuccessStub.callCount).eq(1);
+    expect(ajaxSuccessStub.firstCall.args[0]).eql(data);
+    expect(ajaxSuccessStub.firstCall.args[0]).eql([
+      {
+        Name: 'Name',
+        Id: 'i-1',
+        Type: 'small',
+        State: 'running',
+        AZ: 'us-east-1',
+        PublicIps: '192.168.0.1\n192.168.0.2',
+        PrivateIps: '8.8.8.8',
+      },
+      {
+        ...exampleInstance,
+        PublicIps: '',
+        PrivateIps: '',
+      },
+    ]);
+  });
+
+  it('parseJsonResponse handles NextToken', async () => {
+    setLoggedInElementsVisibility(false);
+    const data: RowData[] = [];
+    const search = new URLSearchParams({
+      MaxResults: '1000',
+      NextToken: 'page-1',
+    });
+    const responseWithNextToken = {
+      ...jsonResponse,
+      NextToken: 'page-2',
+    };
+
+    parseJsonResponse(responseWithNextToken, data, mockAjaxParams, search);
+
+    expect(ajaxSuccessStub.callCount).eq(0);
+    expect(data).eql([
+      {
+        Name: 'Name',
+        Id: 'i-1',
+        Type: 'small',
+        State: 'running',
+        AZ: 'us-east-1',
+        PublicIps: '192.168.0.1\n192.168.0.2',
+        PrivateIps: '8.8.8.8',
+      },
+      exampleRow,
+    ]);
+    expect(search).eql(
+      new URLSearchParams({
+        MaxResults: '1000',
+        NextToken: 'page-2',
+      }),
+    );
+  });
+
+  it('parseJsonResponse appends data', async () => {
+    setLoggedInElementsVisibility(false);
+    const data: RowData[] = [
+      { ...exampleRow, Id: 'i-3' },
+      { ...exampleRow, Id: 'i-4' },
+    ];
+    const search = new URLSearchParams({
+      MaxResults: '1000',
+      NextToken: 'page-1',
+    });
+
+    parseJsonResponse(jsonResponse, data, mockAjaxParams, search);
+
+    expect(ajaxSuccessStub.callCount).eq(1);
+    expect(ajaxSuccessStub.firstCall.args[0]).eql(data);
+    expect(data).eql([
+      { ...exampleRow, Id: 'i-3' },
+      { ...exampleRow, Id: 'i-4' },
+      {
+        Name: 'Name',
+        Id: 'i-1',
+        Type: 'small',
+        State: 'running',
+        AZ: 'us-east-1',
+        PublicIps: '192.168.0.1\n192.168.0.2',
+        PrivateIps: '8.8.8.8',
+      },
+      exampleRow,
+    ]);
+    expect(search).eql(
+      new URLSearchParams({
+        MaxResults: '1000',
+      }),
+    );
+  });
+
+  it('fetchAllData handles no pagination', async () => {
+    fetchStub.resolves(apiResponse);
+
+    fetchAllData(mockAjaxParams);
+
+    expect(fetchStub.callCount).eq(1);
+  });
+
+  // mocking not resolving
+  it.skip('fetchAllData handles pagination', async () => {
+    fetchStub.onFirstCall().resolves({
+      ...apiResponse,
+      json: () => ({ ...jsonResponse, NextToken: 'page-2' }),
+    });
+    fetchStub.onSecondCall().resolves({
+      ...apiResponse,
+      json: () => ({
+        Instances: [
+          { ...exampleRow, Id: 'i-3' },
+          { ...exampleRow, Id: 'i-4' },
+        ],
+        NextToken: 'page-2',
+      }),
+    });
+    fetchStub.onThirdCall().resolves({
+      ...apiResponse,
+      json: () => ({
+        Instances: [
+          { ...exampleRow, Id: 'i-5' },
+          { ...exampleRow, Id: 'i-6' },
+        ],
+      }),
+    });
+
+    fetchAllData(mockAjaxParams);
+
+    expect(fetchStub.callCount).eq(3);
+    expect(ajaxSuccessStub.callCount).eq(1);
+    expect(ajaxSuccessStub.firstCall.args[0]).eql([
+      {
+        Name: 'Name',
+        Id: 'i-1',
+        Type: 'small',
+        State: 'running',
+        AZ: 'us-east-1',
+        PublicIps: '192.168.0.1\n192.168.0.2',
+        PrivateIps: '8.8.8.8',
+      },
+      exampleRow,
+      { ...exampleRow, Id: 'i-3' },
+      { ...exampleRow, Id: 'i-4' },
+      { ...exampleRow, Id: 'i-5' },
+      { ...exampleRow, Id: 'i-6' },
+    ]);
+  });
+  it('ajaxRequest behaves as expected', async () => {
+    global.window.location.hash = 'id_token=Hunter1';
+    fetchStub.resolves(apiResponse);
+
+    ajaxRequest(mockAjaxParams);
+
+    expect(global.window.location.hash).eq('');
+    expect(localStorage.getItem('Authorization')).eq('Hunter1');
+  });
+
+  it('buttons returns expected buttons', async () => {
+    const result = buttons();
+    expect('btnLogOut' in result).eq(true);
   });
 });

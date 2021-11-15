@@ -66,5 +66,6 @@ Note that the tests require:
 The following areas could be improved
 
 * Frontend - Move to framework
+  * Move packaging back to webpack
 * API - move to proper repo structure
 * Security - add Oauth Providers to prevent the use of a dedicated password

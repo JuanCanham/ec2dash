@@ -18,14 +18,12 @@ def step_impl(context, state):
     context.webdriver.refresh()
     check_dashboard_is_visible(context)
     time.sleep(1)
-    dash_rows = [
-        row
-        for row in context.webdriver.find_elements_by_xpath(
-            '//tbody[@id="dataTbody"]/tr'
-        )
-        if context.instance_id in row.text
-    ]
+    context.webdriver.find_element_by_class_name("search-input").clear()
+    time.sleep(.1)
+    context.webdriver.find_element_by_class_name("search-input").send_keys(context.instance_id)
+    time.sleep(1)
+    dash_rows = context.webdriver.find_elements_by_xpath('//*[@id="table"]/tbody/tr')
+    assert len(dash_rows) == 1
 
-    dash_state = dash_rows[0].find_element_by_xpath("./td[3]").text
-    print("states", context.instance_id, state, dash_state)
+    dash_state = dash_rows[0].find_element_by_xpath("./td[4]").text
     assert dash_state == state

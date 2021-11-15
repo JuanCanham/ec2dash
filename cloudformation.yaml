@@ -194,7 +194,7 @@ Resources:
               OriginAccessIdentity: !Sub origin-access-identity/cloudfront/${OriginAccessIdentity}
         DefaultRootObject: index.html
         DefaultCacheBehavior:
-          DefaultTTL: 1
+          DefaultTTL: 900
           TargetOriginId: s3origin
           ViewerProtocolPolicy: allow-all
           Compress: True

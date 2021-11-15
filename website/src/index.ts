@@ -8,21 +8,23 @@ type Instance = {
   PrivateIps: string[];
 };
 
+type RowData = {
+  Name: string;
+  Id: string;
+  Type: string;
+  State: string;
+  AZ: string;
+  PublicIps: string
+  PrivateIps: string
+};
+
 type ApiResponse = {
   NextToken?: string;
   Instances: Instance[];
 };
 
-type DataTable = {
-  NextToken?: string;
-  Instances: Instance[];
-  PageSize: number;
-};
-
-let page: number = 0;
-const dataTable: DataTable = {
-  Instances: [],
-  PageSize: 10,
+type AjaxParms = {
+  success: (data: any[]) => any
 };
 
 const setLoggedInElementsVisibility = (authenticated: boolean) => {
@@ -32,75 +34,10 @@ const setLoggedInElementsVisibility = (authenticated: boolean) => {
 
 const logout = () => {
   setLoggedInElementsVisibility(false);
-  page = 0;
-  dataTable.Instances = [];
   localStorage.removeItem('Authorization');
 };
 
-const generateInstanceRow = (inst: Instance): string => `<tr>
-    <th scope="row">${inst.Name}</th>
-    <td>${inst.Id}</td>
-    <td>${inst.Type}</td>
-    <td>${inst.State}</td>
-    <td>${inst.AZ}</td>
-    <td>${inst.PublicIps.join('\n')}</td>
-    <td>${inst.PrivateIps.join('\n')}</td>
-  </tr>`;
-
-const displayInstances = (Instances: Instance[]) => {
-  const tbody = document.getElementById('dataTbody');
-  tbody.innerHTML = '';
-  Instances.forEach((Instance) => {
-    tbody.innerHTML += generateInstanceRow(Instance);
-  });
-};
-
-const loadTableData = async (NextToken?: string) => {
-  let url = process.env.API_DOMAIN;
-  if (NextToken) {
-    url += `?${new URLSearchParams({ NextToken })}`;
-    const next = document.getElementById('page-more');
-    const last = new HTMLOListElement();
-    last.className = 'page-item';
-    last.innerHTML = `<a class="page-link" href="#">${page + 1}</a>`;
-    document.getElementById('page-bar').insertBefore(next, last);
-  }
-  fetch(url, {
-    headers: [['Authorization', localStorage.getItem('Authorization')]],
-  })
-    .then((response) => {
-      if (!response.ok) {
-        if (response.status >= 400 && response.status < 500) {
-          logout();
-          console.warn(
-            `Cannot get data as not logged in: ${response.status}`,
-          );
-        }
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      return response.json();
-    })
-    .then((body: ApiResponse) => {
-      try {
-        setLoggedInElementsVisibility(true);
-        if ('NextToken' in body) {
-          dataTable.NextToken = body.NextToken;
-        } else {
-          delete dataTable.NextToken;
-          document.getElementById('page-more').hidden = true;
-          if (page === 0) {
-            document.getElementById('page-bar').hidden = true;
-          }
-        }
-        body.Instances.map((Instance: Instance) => dataTable.Instances.push(Instance));
-        displayInstances(body.Instances);
-      } catch (error) {
-        throw new Error(`Error handling api response: ${body} ${error}`);
-      }
-    });
-};
-
-const readCredentials = async (authString: string) => {
+const readCredentials = (authString: string) => {
   if (authString.includes('id_token')) {
     localStorage.setItem(
       'Authorization',
@@ -111,37 +48,77 @@ const readCredentials = async (authString: string) => {
   window.location.hash = '';
 };
 
-const setLoginLink = () => {
-  document.getElementById('loginLink').setAttribute('href', process.env.LOGIN_URL);
+const parseApiResponse = (response: Response) => {
+  if (!response.ok) {
+    if (response.status >= 400 && response.status < 500) {
+      logout();
+      console.warn(`Cannot get data as not logged in: ${response.status}`);
+      return { Instances: [] as string[] };
+    }
+  }
+  return response.json();
 };
 
-const onLoad = async () => {
-  setLoginLink();
-  await readCredentials(window.location.hash);
-  await loadTableData();
+const parseJsonResponse = (
+  body: ApiResponse,
+  data: RowData[],
+  params: AjaxParms,
+  search: URLSearchParams,
+) => {
+  setLoggedInElementsVisibility(true);
+  body.Instances.map((Instance) => data.push({
+    ...Instance,
+    PrivateIps: Instance.PrivateIps.join('\n'),
+    PublicIps: Instance.PublicIps.join('\n'),
+  }));
+  if ('NextToken' in body) {
+    search.set('NextToken', body.NextToken);
+  } else {
+    params.success(data);
+    search.delete('NextToken');
+  }
 };
 
-const reloadData = async () => {
-  page = 0;
-  dataTable.Instances = [];
-  document.getElementById('dataTbody').innerHTML = '';
-  await loadTableData();
+const fetchAllData = (params: AjaxParms) => {
+  const data: RowData[] = [];
+  const search = new URLSearchParams({ MaxResults: '1000' });
+  do {
+    fetch(`https://{{API_DOMAIN}}/?${search}`, {
+      headers: [['Authorization', localStorage.getItem('Authorization')]],
+    })
+      .then(parseApiResponse)
+      .then((body) => {
+        parseJsonResponse(body, data, params, search);
+      });
+  } while ('NextToken' in search.keys());
 };
 
-if (typeof window !== 'undefined') {
-  window.onload = () => {
-    onLoad();
+function ajaxRequest(params: AjaxParms) {
+  readCredentials(window.location.hash);
+  fetchAllData(params);
+}
+
+function buttons() {
+  return {
+    btnLogOut: {
+      text: 'Log Out',
+      icon: 'fa-sign-out-alt',
+      event: logout,
+    },
   };
 }
 
 export {
-  reloadData,
-  logout,
   setLoggedInElementsVisibility,
-  displayInstances,
-  loadTableData,
-  onLoad,
+  logout,
   readCredentials,
-  DataTable,
+  parseApiResponse,
+  parseJsonResponse,
+  fetchAllData,
+  ajaxRequest,
+  buttons,
   ApiResponse,
+  Instance,
+  RowData,
+  AjaxParms,
 };

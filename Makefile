@@ -15,19 +15,16 @@ pre: install lint test package-api package-cfn
 post: package-website sync clear-cache integration-test
 
 api: clean-api install-api lint-api test-api package-api
-website: clean-website install-website lint-website test-website package-website
+website: install-website lint-website test-website package-website sync
 cfn: install-api clean-cfn lint-cfn package-cfn
 
-clean: clean-api clean-website clean-cfn
+clean: clean-api clean-cfn
 
 clean-api:
 	rm -f api/dist/*
 
 clean-cfn:
 	rm -f packaged-cloudformation.yaml
-
-clean-website:
-	cd website && npm run clean
 
 install: install-api install-website
 
@@ -77,7 +74,7 @@ package-website:
 				--stack-name $(STACK_NAME) \
 				--query 'Stacks[0].Outputs[?OutputKey==`UserPoolClientId`].OutputValue' \
 				--output text ) && \
-	cd website && npm run prepare
+	cd website && npm run package
 
 deploy: 
 	aws cloudformation deploy --template-file packaged-cloudformation.yaml \
@@ -92,8 +89,8 @@ diff:
 		
 
 sync:
-	aws s3 cp website/index.html s3://$(DOMAIN)/
-	aws s3 cp website/dist/* s3://$(DOMAIN)/dist/
+	cp website/favicon.ico website/dist/favicon.ico
+	aws s3 sync --delete website/dist/ s3://$(DOMAIN)/
 
 clear-cache:
 	aws cloudfront create-invalidation \
