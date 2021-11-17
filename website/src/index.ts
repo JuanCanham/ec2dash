@@ -102,7 +102,7 @@ function buttons() {
   return {
     btnLogOut: {
       text: 'Log Out',
-      icon: 'fa-sign-out-alt',
+      icon: 'bi-box-arrow-right',
       event: logout,
     },
   };
