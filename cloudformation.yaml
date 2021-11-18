@@ -251,7 +251,7 @@ Resources:
       Users:
         - !Ref DeploymentUser
       PolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
           - Effect: Allow
             Action: cloudformation:DescribeStacks
@@ -259,19 +259,12 @@ Resources:
           - Effect: Allow
             Action:
               - cloudformation:DescribeChangeSet
-              - cloudformation:DeleteChangeSet
               - cloudformation:GetTemplateSummary
             Resource: !Ref AWS::StackId
           - Effect: Allow
-            Action: cloudformation:CreateChangeSet
-            Resource: !Ref AWS::StackId
-            Condition:
-              StringEquals:
-                cloudformation:RoleArn: !GetAtt MainStackRole.Arn
-              StringNotLike:
-                cloudformation:ChangeSetName: diff-change-set-*
-          - Effect: Allow
-            Action: cloudformation:ExecuteChangeSet
+            Action:
+              - cloudformation:DeleteChangeSet
+              - cloudformation:ExecuteChangeSet
             Resource: !Ref AWS::StackId
             Condition:
               StringNotLike:
@@ -281,8 +274,8 @@ Resources:
             Resource: !Ref AWS::StackId
             Condition:
               ArnEquals:
-                cloudformation:RoleArn: !GetAtt DiffStackRole.Arn
-              StringLike:
+                cloudformation:RoleArn: !GetAtt MainStackRole.Arn
+              StringNotLike:
                 cloudformation:ChangeSetName: diff-change-set-*
           - Effect: Allow
             Action:
@@ -294,7 +287,6 @@ Resources:
             Action: iam:PassRole
             Resource:
               - !GetAtt IntegrationTestStackRole.Arn
-              - !GetAtt DiffStackRole.Arn
               - !GetAtt MainStackRole.Arn
           - Effect: Allow
             Action:
@@ -393,6 +385,7 @@ Resources:
             Action:
               - s3:PutBucketPolicy
               - s3:DeleteBucketPolicy
+              - s3:DeleteBucket
             Resource: !GetAtt Bucket.Arn
           - Effect: Allow
             Action:
@@ -425,6 +418,33 @@ Resources:
                 - lambda:UntagResource
               Resource: !GetAtt DescribeInstancesFunction.Arn
             - !Ref AWS::NoValue
+
+  DiffStackUser:
+    Type: AWS::IAM::User
+    Properties:
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:GetTemplateSummary
+                Resource: !Ref AWS::StackId
+              - Effect: Allow
+                Action: cloudformation:CreateChangeSet
+                Resource: !Ref AWS::StackId
+                Condition:
+                  ArnEquals:
+                    cloudformation:RoleArn: !GetAtt DiffStackRole.Arn
+                  StringLike:
+                    cloudformation:ChangeSetName: diff-change-set-*
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt DiffStackRole.Arn
 
   DiffStackRole:
     Type: AWS::IAM::Role
@@ -463,6 +483,9 @@ Resources:
                   - iam:DeletePolicyVersion
                   - iam:SetDefaultPolicyVersion
                   - iam:PassRole
+                  - iam:DeletePolicy
+                  - iam:ListAccessKeys
+                  - idp:DeleteUserPool
                   - route53:DeleteHostedZone
                   - lambda:AddPermission
                   - lambda:RemovePermission
@@ -508,6 +531,8 @@ Outputs:
     Value: !Join ["," , !GetAtt HostedZone.NameServers]
   DeploymentUser:
     Value: !Ref DeploymentUser
+  DiffStackUser:
+    Value: !Ref DiffStackUser
   MainStackRole:
     Value: !GetAtt MainStackRole.Arn
   DiffStackRole:
