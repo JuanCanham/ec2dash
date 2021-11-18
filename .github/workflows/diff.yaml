@@ -7,8 +7,9 @@ jobs:
   Diff:
     env:
       DOMAIN: ec2dash.juancanham.com
+      AWS_DEFAULT_REGION: us-east-1
     runs-on: ubuntu-latest
-    steps:
+    environment: ec2dash.juancanham.com
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2

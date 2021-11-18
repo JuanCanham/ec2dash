@@ -63,7 +63,7 @@ lint-website:
 test: test-api test-website
 
 test-api:
-	pytest -v --cov --cov-report=term-missing --cov-fail-under=95 api/src/
+	pytest -v --cov-report=term-missing --cov-fail-under=95 --cov api/src/ api/src/
 
 test-website:
 	cd website && npm test

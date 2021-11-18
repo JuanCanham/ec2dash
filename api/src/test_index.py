@@ -2,6 +2,7 @@ import json
 from unittest.mock import call, patch
 import pytest
 
+patch("boto3.client")
 import index
 
 
