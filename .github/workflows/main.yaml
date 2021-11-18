@@ -6,9 +6,11 @@ on: [push]
 jobs:
   Build-Deploy-Integrtion-Test:
     env:
+      MOZ_HEADLESS: 1
       DOMAIN: ec2dash.juancanham.com
       AWS_DEFAULT_REGION: us-east-1
-      MOZ_HEADLESS: 1
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     runs-on: ubuntu-latest
     environment: ec2dash.juancanham.com
     concurrency: ec2dash.juancanham.com
