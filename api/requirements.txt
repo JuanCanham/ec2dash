@@ -13,4 +13,5 @@ behave==1.2.*
 boto==2.49.*
 boto3==1.18.*
 selenium==4.0.*
+webdriver-manager==3.5.*
 requests==2.25.*

@@ -5,12 +5,29 @@ Authentication is handled by Cognito
 Deployment is handled by cloudformation (for more details see make file)
 Integration testing is handled by behave & selenium
 
-## Deployment
+## Initial Deployment
 
-1. Deploy the cloudformation without Certificates `make all DOMAIN=example.com DEPLOY_CERT=false`
+1. Deploy the cloudformation without Certificates `make initial DOMAIN=example.com`
 2. Update DNS Nameservers for the domain to point to the created hostedzone (outputs Nameservers)
   * This is needed to for certificate verification
-3. Update the cloudformation `make all DOMAIN=example.com`
+3. Execute the change set against the stack
+
+## Updates
+
+Updates can be run with `make all DOMAIN=example.com` or via CI
+
+### CI/CD
+
+CI/CD is done using github actions, to set this up
+
+1. Deploy `Make initial DOMAIN=ec2dash.juancanham.com`
+2. Create a key for the `DeploymentUser` that is created
+3. Store the key as a [github actions secret](https://docs.github.com/en/actions/security-guides/encrypted-secrets)
+
+The CD role cannot deploy IAM changes by design,
+these must be deployed using a PR and an admin executing the resultant change set.
+
+Note that deploying the certificate
 
 ### User Creation
 
@@ -45,7 +62,7 @@ Cons: single file doesn't transform into testable & deployable easily on lambda
 
 The infrastructure is built using cloudformation
 
-### Security 
+### Security
 
 This is handled by cognito & Oauth, allowing no room for mistakes in my code.
 For the sake of simplicity, no Cookies are used and the jwk is stored in an variable
@@ -55,9 +72,8 @@ For the sake of simplicity, no Cookies are used and the jwk is stored in an vari
 Tests are written in behave and test both the API and frontend
 
 Note that the tests require:
-1. the chrome [selenium chrome webdriver be installed](https://www.selenium.dev/documentation/getting_started/installing_browser_drivers/)
-2. A Default VPC to exist (otherwise update `tests/steps/instance_cloudformation.yaml`)
-3. `AWS_PROFILE` to be set to a role that can:
+1. A Default VPC to exist (otherwise update `tests/steps/instance_cloudformation.yaml`)
+2. `AWS_PROFILE` to be set to a role that can:
  * Create the API (cloudformation, lambda, apigateway, cognito, iam, route53, cloudwatch-logs, s3, cloudfront, acm)
  * Test the API (cognito-idp, cloudformation, ec2)
 

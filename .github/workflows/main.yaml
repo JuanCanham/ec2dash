@@ -1,0 +1,26 @@
+name: deploy ec2dash.juancanham.com
+on: [push]
+  # push:
+  #   branches:
+  #     - main
+jobs:
+  Build-Deploy-Integrtion-Test:
+    env:
+      DOMAIN: ec2dash.juancanham.com
+      MOZ_HEADLESS: 1
+    runs-on: ubuntu-latest
+    environment: ${{ env.DOMAIN }}
+    concurrency: ${{ env.DOMAIN }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      - run: make all DOMAIN=$DOMAIN
+      - name: Revert last commit due to failure
+        if: ${{ failure() }}
+        run: |
+          if $(git log -1 | grep revert); then
+            git revert HEAD
+            git push
+          fi

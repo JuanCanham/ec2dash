@@ -1,4 +1,3 @@
-import time
 from behave import given, when, then
 
 
@@ -88,4 +87,3 @@ def attempt_signin(context):
             for e in context.webdriver.find_elements_by_name("signInSubmitButton")
             if e.is_displayed()
         ]
-    time.sleep(1)
