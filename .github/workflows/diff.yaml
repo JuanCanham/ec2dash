@@ -1,4 +1,4 @@
-Name: Create Diff for ec2dash.juancanham.com
+name: Create Diff for ec2dash.juancanham.com
 on:
   pull_request:
     branches:
