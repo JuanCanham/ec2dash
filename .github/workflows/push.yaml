@@ -5,6 +5,8 @@ on:
       - main
 jobs:
   Build-Lint-Test:
+    env:
+      AWS_DEFAULT_REGION: us-east-1
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
