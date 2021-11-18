@@ -17,6 +17,7 @@ help:
 	@echo 'Other Targets: diff pi website cfn lint-makefile [requires docker]'
 
 all: pre deploy post
+initial: pre create diff sync
 
 pre: install lint test package-api package-cfn
 post: package-website sync clear-cache integration-test
@@ -24,11 +25,6 @@ post: package-website sync clear-cache integration-test
 api: clean-api install-api lint-api test-api package-api
 website: install-website lint-website test-website package-website sync
 cfn: install-api clean-cfn lint-cfn package-cfn
-
-initial: pre
-	DEPLOY_CERT = false
-	deploy
-	diff
 
 clean: clean-api clean-cfn
 
@@ -88,6 +84,12 @@ package-website:
 				--output text ) && \
 	cd website && npm run package
 
+create:
+	aws cloudformation deploy --template-file packaged-cloudformation.yaml \
+		--stack-name $(STACK_NAME) \
+		--parameter-overrides Domain=$(DOMAIN) DeployCertificates=false \
+		--no-fail-on-empty-changeset --capabilities CAPABILITY_IAM
+
 deploy:
 	aws cloudformation deploy --template-file packaged-cloudformation.yaml \
 		--stack-name $(STACK_NAME) \
@@ -95,12 +97,19 @@ deploy:
 		--no-fail-on-empty-changeset --capabilities CAPABILITY_IAM $(CI_DEPLOY_ROLE)
 		
 diff: api package-cfn
-	$$(aws cloudformation deploy --template-file packaged-cloudformation.yaml --stack-name $(STACK_NAME) \
-		--no-fail-on-empty-changeset --capabilities CAPABILITY_IAM --parameter-overrides DeployCertificates=true  \
-		--no-execute-changeset --role-arn $$(aws cloudformation describe-stacks --output text --stack-name $(STACK_NAME) \
-		--query 'Stacks[0].Outputs[?OutputKey==`DiffStackRole`].OutputValue' ) \
-		| tail -n 1 | grep -v 'No changes to deploy' | yq -y )
-	
+	CHANGE_SET=$$(aws cloudformation create-change-set \
+		--stack-name $(STACK_NAME) \
+		--change-set-name diff-change-set-$(GITHUB_SHA) \
+		--template-body file://packaged-cloudformation.yaml \
+		--parameters ParameterKey=Domain,UsePreviousValue=true ParameterKey=DeployCertificates,ParameterValue=true \
+		--output text --query Id --capabilities CAPABILITY_IAM  \
+		--role-arn $$( aws cloudformation describe-stacks \
+			--stack-name $(STACK_NAME) \
+			--output text \
+			--query 'Stacks[0].Outputs[?OutputKey==`DiffStackRole`].OutputValue' \
+		)) && \
+		aws cloudformation wait change-set-create-complete --change-set-name $$CHANGE_SET && \
+		aws cloudformation describe-change-set --change-set-name $$CHANGE_SET | yq -y
 
 sync:
 	cp website/favicon.ico website/dist/favicon.ico

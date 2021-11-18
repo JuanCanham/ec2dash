@@ -254,32 +254,41 @@ Resources:
         Version: "2012-10-17"
         Statement:
           - Effect: Allow
+            Action: cloudformation:DescribeStacks
+            Resource: '*'
+          - Effect: Allow
             Action:
               - cloudformation:DescribeChangeSet
               - cloudformation:DeleteChangeSet
-              - cloudformation:DescribeStacks
               - cloudformation:GetTemplateSummary
             Resource: !Ref AWS::StackId
-          - Effect: Allow
-            Action:
-              - cloudformation:CreateChangeSet
-              - cloudformation:ExecuteChangeSet
-            Resource: !Ref AWS::StackId
-            Condition:
-              StringEquals:
-                cloudformation:RoleArn: !GetAtt MainStackRole.Arn
           - Effect: Allow
             Action: cloudformation:CreateChangeSet
             Resource: !Ref AWS::StackId
             Condition:
               StringEquals:
+                cloudformation:RoleArn: !GetAtt MainStackRole.Arn
+              StringNotLike:
+                cloudformation:ChangeSetName: diff-change-set-*
+          - Effect: Allow
+            Action: cloudformation:ExecuteChangeSet
+            Resource: !Ref AWS::StackId
+            Condition:
+              StringNotLike:
+                cloudformation:ChangeSetName: diff-change-set-*
+          - Effect: Allow
+            Action: cloudformation:CreateChangeSet
+            Resource: !Ref AWS::StackId
+            Condition:
+              ArnEquals:
                 cloudformation:RoleArn: !GetAtt DiffStackRole.Arn
+              StringLike:
+                cloudformation:ChangeSetName: diff-change-set-*
           - Effect: Allow
             Action:
               - cloudformation:CreateStack
               - cloudformation:UpdateStack
               - cloudformation:DeleteStack
-              - cloudformation:DescribeStacks
             Resource: !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}-integration-test-stack/*
           - Effect: Allow
             Action: iam:PassRole
@@ -287,9 +296,6 @@ Resources:
               - !GetAtt IntegrationTestStackRole.Arn
               - !GetAtt DiffStackRole.Arn
               - !GetAtt MainStackRole.Arn
-            Condition:
-              StringEquals:
-                iam:PassedToService: cloudformation.amazonaws.com
           - Effect: Allow
             Action:
               - cognito-idp:AdminConfirmSignUp
@@ -297,18 +303,23 @@ Resources:
             Resource: !GetAtt UserPool.Arn
           - Effect: Allow
             Action:
-              - s3:GetObjects*
-              - s3:PutObjects*
+              - s3:GetObject
+              - s3:PutObject
             Resource: !Sub ${Bucket.Arn}/*
+          - Effect: Allow
+            Action: s3:ListBucket
+            Resource: !GetAtt Bucket.Arn
           - Effect: Allow
             Action:
               - ec2:StartInstances
               - ec2:StopInstances
-              - ec2:DescribeInstances
             Resource: '*'
             Condition:
               StringEquals:
                 ec2:ResourceTag/aws:cloudformation:stack-name: !Sub ${AWS::StackName}-integration-test-stack
+          - Effect: Allow
+            Action: ec2:DescribeInstances
+            Resource: '*'
           - !If
             - DeployCertificates
             - Effect: Allow
@@ -354,15 +365,14 @@ Resources:
               - apigateway:*
               - acm:*
               - cloudfront:*
+              - logs:*
               - route53:GetHostedZone
               - route53:CreateHostedZone
               - route53:UpdateHostedZoneComment
               - route53:ListTagsForResource
               - route53:ListQueryLoggingConfigs
+              - route53:GetChange
               - s3:CreateBucket
-              - logs:CreateLogGroup
-              - logs:PutRetentionPolicy
-              - logs:DeleteRetentionPolicy
               - cognito-idp:CreateUserPool
               - cognito-idp:UpdateUserPool
               - lambda:CreateFunction
@@ -371,6 +381,10 @@ Resources:
               - iam:GetPolicy
               - iam:ListPolicyVersions
               - iam:GetPolicyVersion
+              - iam:GetRolePolicy
+              - iam:ListPolicyTags
+              - iam:ListRoleTags
+              - iam:ListUserTags
             Resource: '*'
           - Effect: Allow
             Action: route53:ChangeResourceRecordSets
@@ -448,8 +462,11 @@ Resources:
                   - iam:CreatePolicyVersion
                   - iam:DeletePolicyVersion
                   - iam:SetDefaultPolicyVersion
-                  - logs:DeleteLogGroup
+                  - iam:PassRole
                   - route53:DeleteHostedZone
+                  - lambda:AddPermission
+                  - lambda:RemovePermission
+                  - lambda:DeleteFunction
                 Resource: '*'
 
   IntegrationTestStackRole:
