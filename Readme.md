@@ -22,12 +22,16 @@ Updates can be run with `make all DOMAIN=example.com` or via CI
 
 CI/CD is done using github actions, to set this up
 
-1. Deploy `Make initial DOMAIN=ec2dash.juancanham.com`
-2. Create a key for the `DeploymentUser` that is created
-3. Store the key as a [github actions secret](https://docs.github.com/en/actions/security-guides/encrypted-secrets)
+1. Deploy `Make initial DOMAIN=ec2dash.example.com`
+2. Create access keys for the `DeploymentUser` & `DiffStackUser` that are created
+3. Store the keys as [github actions secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets)
+  * The `DeploymentUser` should go in the `ec2dash.example.com` environment,
+    it should be locked down to protected branches as it has write access
+  * The `DiffStackUser` should go in the `ec2dash.example.com-diff` environment,
+    it doesn't need restricting as that allows changes-sets to be create on Pull Requests
 
-The CD role cannot deploy IAM changes by design,
-these must be deployed using a PR and an admin executing the resultant change set.
+The `DeploymentUser` role cannot deploy IAM changes by design,
+these must be deployed using a Pull Requests and an admin/authorized user executing the change set.
 
 Note that deploying the certificate
 
