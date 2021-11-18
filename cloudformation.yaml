@@ -374,6 +374,7 @@ Resources:
               - iam:ListPolicyVersions
               - iam:GetPolicyVersion
               - iam:GetRolePolicy
+              - iam:GetUserPolicy
               - iam:ListPolicyTags
               - iam:ListRoleTags
               - iam:ListUserTags
