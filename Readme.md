@@ -1,5 +1,7 @@
 # EC2 Dashboard
 
+[![Validation](https://github.com/JuanCanham/ec2dash/actions/workflows/push.yaml/badge.svg)](https://github.com/JuanCanham/ec2dash/actions/workflows/push.yaml)
+
 This will deploy a simple website (typescript) & api (python), to view deployed ec2 instances
 Authentication is handled by Cognito
 Deployment is handled by cloudformation (for more details see make file)

@@ -258,9 +258,12 @@ Resources:
               - cloudformation:DescribeChangeSet
               - cloudformation:DeleteChangeSet
               - cloudformation:DescribeStacks
+              - cloudformation:GetTemplateSummary
             Resource: !Ref AWS::StackId
           - Effect: Allow
-            Action: cloudformation:UpdateStack
+            Action:
+              - cloudformation:CreateChangeSet
+              - cloudformation:ExecuteChangeSet
             Resource: !Ref AWS::StackId
             Condition:
               StringEquals:
@@ -323,6 +326,14 @@ Resources:
             Action: sts:AssumeRole
             Principal:
               Service: cloudformation.amazonaws.com
+      Policies:
+        - PolicyName: extraPermissions
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: cloudformation:ExecuteChangeSet
+                Resource: !Ref AWS::StackId
 
   MainStackPolicy:
     Type: AWS::IAM::ManagedPolicy
@@ -334,10 +345,16 @@ Resources:
         Version: 2012-10-17
         Statement:
           - Effect: Allow
+            Action: cloudformation:CreateChangeSet
+            Resource:
+              - !Ref AWS::StackId
+              - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31
+          - Effect: Allow
             Action:
               - apigateway:*
               - acm:*
               - cloudfront:*
+              - route53:GetHostedZone
               - route53:CreateHostedZone
               - route53:UpdateHostedZoneComment
               - s3:CreateBucket
@@ -347,6 +364,11 @@ Resources:
               - cognito-idp:CreateUserPool
               - cognito-idp:UpdateUserPool
               - lambda:CreateFunction
+              - iam:GetRole
+              - iam:GetUser
+              - iam:GetPolicy
+              - iam:ListPolicyVersions
+              - iam:GetPolicyVersion
             Resource: '*'
           - Effect: Allow
             Action: route53:ChangeResourceRecordSets
@@ -366,7 +388,7 @@ Resources:
               - cognito-idp:DeleteUserPoolDomain
               - cognito-idp:SetRiskConfiguration
               - cognito-idp:SetUICustomization
-              - congito-idp:SetUserPoolMfaConfig
+              - cognito-idp:SetUserPoolMfaConfig
             Resource: !GetAtt UserPool.Arn
           - !If
             - DeployCertificates
@@ -421,8 +443,11 @@ Resources:
                   - iam:PutUserPolicy
                   - iam:UpdateAssumeRolePolicy
                   - iam:UpdateRoleDescription
+                  - iam:CreatePolicyVersion
+                  - iam:DeletePolicyVersion
+                  - iam:SetDefaultPolicyVersion
                   - logs:DeleteLogGroup
-                  - route53:DeleteHosedZone
+                  - route53:DeleteHostedZone
                 Resource: '*'
 
   IntegrationTestStackRole:

@@ -3,6 +3,12 @@ DOMAIN := ec2dash.example.com
 STACK_NAME := $(subst .,-,$(DOMAIN))
 DEPLOY_CERT = true
 
+ifeq ($(CI),true)
+	CI_DEPLOY_ROLE = --role-arn $(shell aws cloudformation describe-stacks \
+		--query 'Stacks[0].Outputs[?OutputKey==`MainStackRole`].OutputValue' \
+		--output text --stack-name $(STACK_NAME) )
+endif
+
 help:
 	@echo 'Main Targets:'
 	@echo '  * all DOMAIN=ec2dash.example.com'
@@ -18,12 +24,6 @@ post: package-website sync clear-cache integration-test
 api: clean-api install-api lint-api test-api package-api
 website: install-website lint-website test-website package-website sync
 cfn: install-api clean-cfn lint-cfn package-cfn
-
-ifeq ($(CI),true)
-	CI_DEPLOY_ROLE += --role-arn $(shell aws cloudformation describe-stacks \
-		--query 'Stacks[0].Outputs[?OutputKey==`MainStackRole`].OutputValue' \
-		--output text --stack-name $(STACK_NAME) )
-endif
 
 initial: pre
 	DEPLOY_CERT = false
@@ -96,10 +96,11 @@ deploy:
 		
 diff: api package-cfn
 	$$(aws cloudformation deploy --template-file packaged-cloudformation.yaml --stack-name $(STACK_NAME) \
-		--no-fail-on-empty-changeset --capabilities CAPABILITY_IAM --no-execute-changeset \
-		--parameter-overrides DeployCertificates=true --role-arn \
-			$$(aws cloudformation describe-stacks  --output text --stack-name $(STACK_NAME)) \
-			--query 'Stacks[0].Outputs[?OutputKey==`DiffStackRole`].OutputValue' ) | tail -n 1 ) | yq -y '.'
+		--no-fail-on-empty-changeset --capabilities CAPABILITY_IAM --parameter-overrides DeployCertificates=true  \
+		--no-execute-changeset --role-arn $$(aws cloudformation describe-stacks --output text --stack-name $(STACK_NAME) \
+		--query 'Stacks[0].Outputs[?OutputKey==`DiffStackRole`].OutputValue' ) \
+		| tail -n 1 | grep -v 'No changes to deploy' | yq -y )
+	
 
 sync:
 	cp website/favicon.ico website/dist/favicon.ico
