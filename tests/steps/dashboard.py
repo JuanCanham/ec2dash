@@ -17,9 +17,7 @@ def step_impl(context):
 def step_impl(context, state):
     context.webdriver.refresh()
     check_dashboard_is_visible(context)
-    time.sleep(1)
     context.webdriver.find_element_by_class_name("search-input").clear()
-    time.sleep(0.1)
     context.webdriver.find_element_by_class_name("search-input").send_keys(
         context.instance_id
     )

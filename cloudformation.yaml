@@ -20,10 +20,10 @@ Resources:
     Type: AWS::Serverless::HttpApi
     Properties:
       FailOnWarnings: true
-      AccessLogSettings: 
+      AccessLogSettings:
         DestinationArn: !GetAtt ApiAccessLogs.Arn
         Format: $context.requestId,$context.requestTime,$context.resourcePath,$context.identity.caller,$context.identity.sourceIp
-      Domain: 
+      Domain:
         CertificateArn: !Ref ApiCertificate
         DomainName: !Sub 'api.${Domain}'
         Route53:
@@ -95,7 +95,7 @@ Resources:
 
   UserPool:
     Type: AWS::Cognito::UserPool
-    Properties: 
+    Properties:
       Policies:
         PasswordPolicy:
           RequireLowercase: true
@@ -111,18 +111,18 @@ Resources:
 
   UserPoolClient:
     Type: AWS::Cognito::UserPoolClient
-    Properties: 
+    Properties:
       AllowedOAuthFlowsUserPoolClient: true
       AllowedOAuthFlows:
         - implicit
-      AllowedOAuthScopes: 
+      AllowedOAuthScopes:
         - aws.cognito.signin.user.admin
         - openid
         - email
       UserPoolId: !Ref UserPool
       PreventUserExistenceErrors: ENABLED
       GenerateSecret: true
-      CallbackURLs: 
+      CallbackURLs:
         - !Sub https://${Domain}
       LogoutURLs:
         - !Sub https://${Domain}
@@ -131,7 +131,7 @@ Resources:
 
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
-    Properties: 
+    Properties:
       Domain: !Select [0, !Split [., !Ref Domain]]
       UserPoolId: !Ref UserPool
 
@@ -149,8 +149,8 @@ Resources:
         Statement:
           - Sid: GetOriginAccessIdentity
             Effect: Allow
-            Principal: 
-              AWS: !Sub arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity ${OriginAccessIdentity}
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::cloudfront:user/CloudFront Origin Access Identity ${OriginAccessIdentity}
             Action: s3:GetObject
             Resource: !Sub '${Bucket.Arn}/*'
 
@@ -182,7 +182,7 @@ Resources:
         Enabled: true
         IPV6Enabled: true
         PriceClass: PriceClass_100
-        ViewerCertificate: !If 
+        ViewerCertificate: !If
           - DeployCertificates
           - AcmCertificateArn: !Ref RootCertificate
             SslSupportMethod: sni-only
@@ -219,16 +219,16 @@ Resources:
           print(msg)
           print(f"invoked with ${event} ${context}")
           return {
-            "statusCode": 500, 
+            "statusCode": 500,
             "body": msg
           }
       Events:
-        HttpApi: 
+        HttpApi:
           Type: HttpApi
           Properties:
             ApiId: !Ref Api
             Method: GET
-            Path: / 
+            Path: /
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -242,6 +242,258 @@ Resources:
               Action: ec2:DescribeInstances
               Resource: '*'
 
+  DeploymentUser:
+    Type: AWS::IAM::User
+
+  DeploymentPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Users:
+        - !Ref DeploymentUser
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: cloudformation:DescribeStacks
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - cloudformation:DescribeChangeSet
+              - cloudformation:DeleteChangeSet
+              - cloudformation:GetTemplateSummary
+            Resource: !Ref AWS::StackId
+          - Effect: Allow
+            Action: cloudformation:CreateChangeSet
+            Resource: !Ref AWS::StackId
+            Condition:
+              StringEquals:
+                cloudformation:RoleArn: !GetAtt MainStackRole.Arn
+              StringNotLike:
+                cloudformation:ChangeSetName: diff-change-set-*
+          - Effect: Allow
+            Action: cloudformation:ExecuteChangeSet
+            Resource: !Ref AWS::StackId
+            Condition:
+              StringNotLike:
+                cloudformation:ChangeSetName: diff-change-set-*
+          - Effect: Allow
+            Action: cloudformation:CreateChangeSet
+            Resource: !Ref AWS::StackId
+            Condition:
+              ArnEquals:
+                cloudformation:RoleArn: !GetAtt DiffStackRole.Arn
+              StringLike:
+                cloudformation:ChangeSetName: diff-change-set-*
+          - Effect: Allow
+            Action:
+              - cloudformation:CreateStack
+              - cloudformation:UpdateStack
+              - cloudformation:DeleteStack
+            Resource: !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}-integration-test-stack/*
+          - Effect: Allow
+            Action: iam:PassRole
+            Resource:
+              - !GetAtt IntegrationTestStackRole.Arn
+              - !GetAtt DiffStackRole.Arn
+              - !GetAtt MainStackRole.Arn
+          - Effect: Allow
+            Action:
+              - cognito-idp:AdminConfirmSignUp
+              - cognito-idp:AdminDeleteUser
+            Resource: !GetAtt UserPool.Arn
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+            Resource: !Sub ${Bucket.Arn}/*
+          - Effect: Allow
+            Action: s3:ListBucket
+            Resource: !GetAtt Bucket.Arn
+          - Effect: Allow
+            Action:
+              - ec2:StartInstances
+              - ec2:StopInstances
+            Resource: '*'
+            Condition:
+              StringEquals:
+                ec2:ResourceTag/aws:cloudformation:stack-name: !Sub ${AWS::StackName}-integration-test-stack
+          - Effect: Allow
+            Action: ec2:DescribeInstances
+            Resource: '*'
+          - !If
+            - DeployCertificates
+            - Effect: Allow
+              Action: cloudfront:CreateInvalidation
+              Resource: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${CloudfrontDistribution}
+            - !Ref AWS::NoValue
+
+  MainStackRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Principal:
+              Service: cloudformation.amazonaws.com
+      Policies:
+        - PolicyName: extraPermissions
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: cloudformation:ExecuteChangeSet
+                Resource: !Ref AWS::StackId
+
+  MainStackPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Roles:
+       - !Ref DiffStackRole
+       - !Ref MainStackRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: cloudformation:CreateChangeSet
+            Resource:
+              - !Ref AWS::StackId
+              - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31
+          - Effect: Allow
+            Action:
+              - apigateway:*
+              - acm:*
+              - cloudfront:*
+              - logs:*
+              - route53:GetHostedZone
+              - route53:CreateHostedZone
+              - route53:UpdateHostedZoneComment
+              - route53:ListTagsForResource
+              - route53:ListQueryLoggingConfigs
+              - route53:GetChange
+              - s3:CreateBucket
+              - cognito-idp:CreateUserPool
+              - cognito-idp:UpdateUserPool
+              - lambda:CreateFunction
+              - iam:GetRole
+              - iam:GetUser
+              - iam:GetPolicy
+              - iam:ListPolicyVersions
+              - iam:GetPolicyVersion
+              - iam:GetRolePolicy
+              - iam:ListPolicyTags
+              - iam:ListRoleTags
+              - iam:ListUserTags
+            Resource: '*'
+          - Effect: Allow
+            Action: route53:ChangeResourceRecordSets
+            Resource: !Sub arn:${AWS::Partition}:route53:::hostedzone/${HostedZone}
+          - Effect: Allow
+            Action:
+              - s3:PutBucketPolicy
+              - s3:DeleteBucketPolicy
+            Resource: !GetAtt Bucket.Arn
+          - Effect: Allow
+            Action:
+              - cognito-idp:CreateUserPoolClient
+              - cognito-idp:UpdateUserPoolClient
+              - cognito-idp:DeleteUserPoolClient
+              - cognito-idp:CreateUserPoolDomain
+              - cognito-idp:UpdateUserPoolDomain
+              - cognito-idp:DeleteUserPoolDomain
+              - cognito-idp:SetRiskConfiguration
+              - cognito-idp:SetUICustomization
+              - cognito-idp:SetUserPoolMfaConfig
+            Resource: !GetAtt UserPool.Arn
+          - !If
+            - DeployCertificates
+            - Effect: Allow
+              Action:
+                - lambda:AddPermission
+                - lambda:RemovePermission
+                - lambda:UpdateFunctionCode
+                - lambda:DeleteFunction
+                - lambda:UpdateFunctionConfiguration
+                - lambda:CreateEventSourceMapping
+                - lambda:UpdateEventSourceMapping
+                - lambda:DeleteEventSourceMapping
+                - lambda:PutFunctionEventInvokeConfig
+                - lambda:UpdateFunctionEventInvokeConfig
+                - lambda:DeleteFunctionEventInvokeConfig
+                - lambda:TagResource
+                - lambda:UntagResource
+              Resource: !GetAtt DescribeInstancesFunction.Arn
+            - !Ref AWS::NoValue
+
+  DiffStackRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Principal:
+              Service: cloudformation.amazonaws.com
+      Policies:
+        - PolicyName: extraPermissions
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - iam:CreateUser
+                  - iam:UpdateUser
+                  - iam:DeleteUser
+                  - iam:CreateRole
+                  - iam:UpdateRole
+                  - iam:DeleteRole
+                  - iam:AttachRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:AttachUserPolicy
+                  - iam:PutRolePolicy
+                  - iam:DeleteUserPolicy
+                  - iam:DetachUserPolicy
+                  - iam:PutUserPolicy
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:UpdateRoleDescription
+                  - iam:CreatePolicyVersion
+                  - iam:DeletePolicyVersion
+                  - iam:SetDefaultPolicyVersion
+                  - iam:PassRole
+                  - route53:DeleteHostedZone
+                  - lambda:AddPermission
+                  - lambda:RemovePermission
+                  - lambda:DeleteFunction
+                Resource: '*'
+
+  IntegrationTestStackRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Principal:
+              Service: cloudformation.amazonaws.com
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:RunInstances
+                  - ec2:TerminateInstances
+                  - ec2:DescribeInstances
+                Resource: '*'
+              - Effect: Allow
+                Action: ssm:GetParameters
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}::parameter/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-arm64-gp2
+
 Outputs:
   ApiId:
     Condition: DeployCertificates
@@ -254,3 +506,11 @@ Outputs:
     Value: !Ref UserPoolClient
   NameServers:
     Value: !Join ["," , !GetAtt HostedZone.NameServers]
+  DeploymentUser:
+    Value: !Ref DeploymentUser
+  MainStackRole:
+    Value: !GetAtt MainStackRole.Arn
+  DiffStackRole:
+    Value: !GetAtt DiffStackRole.Arn
+  IntegrationTestStackRole:
+    Value: !GetAtt IntegrationTestStackRole.Arn

@@ -5,27 +5,34 @@ from behave import given, when
 @given("an instance is created")
 def step_impl(context):
     try:
-        context.cloudformation.describe_stacks(StackName=context.stack_name)
+        context.cloudformation.describe_stacks(StackName=context.test_stack_name)
     except Exception:
-        print(f"Creating Cloudformation stack with instnace ({context.stack_name})")
+        print(
+            f"Creating Cloudformation stack with instnace ({context.test_stack_name})"
+        )
         create_response = context.cloudformation.create_stack(
-            StackName=context.stack_name,
+            StackName=context.test_stack_name,
             TemplateBody=open(
                 Path(PurePath(__file__).parent, "instance_cloudformation.yaml"),
                 "r",
                 encoding="utf-8",
             ).read(),
             ResourceTypes=["AWS::EC2::Instance"],
+            RoleARN=get_stack_output(
+                context, context.main_stack_name, "IntegrationTestStackRole"
+            ),
         )
         context.stack_id = create_response["StackId"]
         print(f"Waiting on Cloudformation stack completion ({context.stack_id})")
         waiter = context.cloudformation.get_waiter("stack_create_complete")
-        waiter.wait(StackName=context.stack_name)
+        waiter.wait(StackName=context.test_stack_name)
 
 
 @when("the instance is started")
 def step_impl(context):
-    context.instance_id = get_instance_id(context)
+    context.instance_id = get_stack_output(
+        context, context.test_stack_name, "InstanceId"
+    )
     instance = context.ec2.Instance(context.instance_id)
     instance.start()
     instance.wait_until_running()
@@ -33,7 +40,9 @@ def step_impl(context):
 
 @when("the instance is stopped")
 def step_impl(context):
-    context.instance_id = get_instance_id(context)
+    context.instance_id = get_stack_output(
+        context, context.test_stack_name, "InstanceId"
+    )
     instance = context.ec2.Instance(context.instance_id)
     instance.stop()
     instance.wait_until_stopped()
@@ -41,19 +50,24 @@ def step_impl(context):
 
 @when("the instance is terminated")
 def step_impl(context):
-    context.instance_id = get_instance_id(context)
-    context.cloudformation.delete_stack(StackName=context.stack_name)
-    waiter = context.cloudformation.get_waiter("stack_delete_complete")
-    waiter.wait(StackName=context.stack_name)
-
-
-def get_instance_id(context):
-    describe_response = context.cloudformation.describe_stacks(
-        StackName=context.stack_name
+    context.instance_id = get_stack_output(
+        context, context.test_stack_name, "InstanceId"
     )
-    instance_id = [
+    context.cloudformation.delete_stack(
+        StackName=context.test_stack_name,
+        RoleARN=get_stack_output(
+            context, context.main_stack_name, "IntegrationTestStackRole"
+        ),
+    )
+    waiter = context.cloudformation.get_waiter("stack_delete_complete")
+    waiter.wait(StackName=context.test_stack_name)
+
+
+def get_stack_output(context, stack_name, key):
+    describe_response = context.cloudformation.describe_stacks(StackName=stack_name)
+    value = [
         out["OutputValue"]
         for out in describe_response["Stacks"][0]["Outputs"]
-        if out["OutputKey"] == "InstanceId"
+        if out["OutputKey"] == key
     ][0]
-    return instance_id
+    return value

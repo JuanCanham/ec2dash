@@ -3,6 +3,7 @@ import random
 import string
 import boto3
 from selenium import webdriver
+from webdriver_manager.firefox import GeckoDriverManager
 
 
 def before_all(context):
@@ -15,10 +16,13 @@ def before_all(context):
     context.dashboard = f"https://{context.domain}/"
 
     context.api = f"https://api.{context.domain}"
-    context.webdriver = webdriver.Chrome()
+    context.webdriver = webdriver.Firefox(
+        executable_path=GeckoDriverManager().install()
+    )
     context.password = gen_password(32)
 
-    context.stack_name = f"{context.domain.replace('.','-')}-integration-test-stack"
+    context.main_stack_name = context.domain.replace(".", "-")
+    context.test_stack_name = f"{context.main_stack_name}-integration-test-stack"
 
     cleanup_user(context)
 
@@ -30,7 +34,7 @@ def after_all(context):
 def cleanup_user(context):
     try:
         cfn_response = context.cloudformation.describe_stacks(
-            StackName=context.domain.replace(".", "-")
+            StackName=context.main_stack_name
         )
         context.user_pool_id = [
             out["OutputValue"]

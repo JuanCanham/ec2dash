@@ -2,17 +2,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Minimal Template to launch a single small instance
 
-Parameters:
-  ImageId:
-    Type : "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>"
-    Default: "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-arm64-gp2"
-
 Resources:
   Instance: 
     Type: AWS::EC2::Instance
     Properties: 
-      ImageId: !Ref ImageId
-      InstanceType: t4g.micro
+      ImageId: '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-arm64-gp2}}'
+      InstanceType: t4g.nano
 
 Outputs:
   InstanceId:

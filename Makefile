@@ -1,15 +1,23 @@
 .PHONY: help all clean install lint test package pre post api website cfn
+DOMAIN := ec2dash.example.com
 STACK_NAME := $(subst .,-,$(DOMAIN))
 DEPLOY_CERT = true
 
+ifeq ($(CI),true)
+	CI_DEPLOY_ROLE = --role-arn $(shell aws cloudformation describe-stacks \
+		--query 'Stacks[0].Outputs[?OutputKey==`MainStackRole`].OutputValue' \
+		--output text --stack-name $(STACK_NAME) )
+endif
+
 help:
 	@echo 'Main Targets:'
-	@echo '  * all DOMAIN=example.com'
-	@echo	'  * all DOMAIN=example.com DEPLOY_CERT=false - Deploy the template without a certificate (see Readme)'
+	@echo '  * all DOMAIN=ec2dash.example.com'
+	@echo	'  * initial DOMAIN=ec2dash.example.com - Deploy the template without a certificate (see Readme)'
 	@echo 'Included in all: clean install lint test package deploy sync clear-cache integration-test'
 	@echo 'Other Targets: diff pi website cfn lint-makefile [requires docker]'
 
 all: pre deploy post
+initial: pre create diff sync
 
 pre: install lint test package-api package-cfn
 post: package-website sync clear-cache integration-test
@@ -34,16 +42,16 @@ install-api:
 install-website:
 	cd website && npm i
 
-lint: lint-cfn lint-api lint-website 
+lint: lint-cfn lint-api lint-website
 
 lint-cfn:
 	cfn-lint cloudformation.yaml
 
 lint-api:
-	black api/ tests/ & 
+	black api/ tests/ &
 	cd api && \
 	pylint src/*.py && \
-	mypy --ignore-missing-imports src/ 
+	mypy --ignore-missing-imports src/
 
 lint-website:
 	cd website && npm run lint
@@ -51,12 +59,12 @@ lint-website:
 test: test-api test-website
 
 test-api:
-	pytest -v --cov --cov-report=term-missing --cov-fail-under=95 api/src/
+	pytest -v --cov-report=term-missing --cov-fail-under=95 --cov api/src/ api/src/
 
 test-website:
 	cd website && npm test
 
-package: package-api package-cfn package-website 
+package: package-api package-cfn package-website
 
 package-cfn:
 	cfn-flip -j cloudformation.yaml | yq --rawfile InlineCode api/dist/index.py \
@@ -69,24 +77,39 @@ package-api:
 	strip-hints --to-empty --inplace api/dist/index.py
 
 package-website:
-	export DOMAIN 
+	export DOMAIN
 	export CLIENT_ID=$(shell aws cloudformation describe-stacks \
 				--stack-name $(STACK_NAME) \
 				--query 'Stacks[0].Outputs[?OutputKey==`UserPoolClientId`].OutputValue' \
 				--output text ) && \
 	cd website && npm run package
 
-deploy: 
+create:
+	aws cloudformation deploy --template-file packaged-cloudformation.yaml \
+		--stack-name $(STACK_NAME) \
+		--parameter-overrides Domain=$(DOMAIN) DeployCertificates=false \
+		--no-fail-on-empty-changeset --capabilities CAPABILITY_IAM
+
+deploy:
 	aws cloudformation deploy --template-file packaged-cloudformation.yaml \
 		--stack-name $(STACK_NAME) \
 		--parameter-overrides Domain=$(DOMAIN) DeployCertificates=$(DEPLOY_CERT) \
-		--no-fail-on-empty-changeset --capabilities CAPABILITY_IAM
+		--no-fail-on-empty-changeset --capabilities CAPABILITY_IAM $(CI_DEPLOY_ROLE)
 		
-diff:
-	aws cloudformation deploy --template-file packaged-cloudformation.yaml \
+diff: api package-cfn
+	CHANGE_SET=$$(aws cloudformation create-change-set \
 		--stack-name $(STACK_NAME) \
-		--no-fail-on-empty-changeset --no-execute-changeset --capabilities CAPABILITY_IAM
-		
+		--change-set-name diff-change-set-$(GITHUB_SHA) \
+		--template-body file://packaged-cloudformation.yaml \
+		--parameters ParameterKey=Domain,UsePreviousValue=true ParameterKey=DeployCertificates,ParameterValue=true \
+		--output text --query Id --capabilities CAPABILITY_IAM  \
+		--role-arn $$( aws cloudformation describe-stacks \
+			--stack-name $(STACK_NAME) \
+			--output text \
+			--query 'Stacks[0].Outputs[?OutputKey==`DiffStackRole`].OutputValue' \
+		)) && \
+		aws cloudformation wait change-set-create-complete --change-set-name $$CHANGE_SET && \
+		aws cloudformation describe-change-set --change-set-name $$CHANGE_SET | yq -y
 
 sync:
 	cp website/favicon.ico website/dist/favicon.ico
@@ -101,7 +124,6 @@ clear-cache:
 
 integration-test:
 	behave tests/
-
 	
 lint-makefile:
 	docker run --rm -v $(pwd):/data cytopia/checkmake Makefile
