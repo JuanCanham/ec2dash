@@ -289,7 +289,7 @@ Resources:
               - !GetAtt MainStackRole.Arn
             Condition:
               StringEquals:
-                iam:PassedToService: cloudformation
+                iam:PassedToService: cloudformation.amazonaws.com
           - Effect: Allow
             Action:
               - cognito-idp:AdminConfirmSignUp
@@ -357,6 +357,8 @@ Resources:
               - route53:GetHostedZone
               - route53:CreateHostedZone
               - route53:UpdateHostedZoneComment
+              - route53:ListTagsForResource
+              - route53:ListQueryLoggingConfigs
               - s3:CreateBucket
               - logs:CreateLogGroup
               - logs:PutRetentionPolicy
