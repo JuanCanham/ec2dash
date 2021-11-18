@@ -9,8 +9,8 @@ jobs:
       DOMAIN: ec2dash.juancanham.com
       MOZ_HEADLESS: 1
     runs-on: ubuntu-latest
-    environment: ${{ env.DOMAIN }}
-    concurrency: ${{ env.DOMAIN }}
+    environment: ec2dash.juancanham.com
+    concurrency: ec2dash.juancanham.com
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
