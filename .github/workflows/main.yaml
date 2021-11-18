@@ -1,8 +1,8 @@
 name: deploy ec2dash.juancanham.com
-on: [push]
-  # push:
-  #   branches:
-  #     - main
+on:
+  push:
+    branches:
+      - main
 jobs:
   Build-Deploy-Integrtion-Test:
     env:

@@ -1,5 +1,5 @@
 name: Validation
-on: 
+on:
   push:
     branches-ignore:
       - main
