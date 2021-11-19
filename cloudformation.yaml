@@ -312,7 +312,7 @@ Resources:
           Action: sts:AssumeRoleWithWebIdentity
           Condition:
             StringEquals:
-              token.actions.githubusercontent.com:sub: !Sub repo:${Repo}:ref:refs/heads/main
+              token.actions.githubusercontent.com:sub: !Sub repo:${Repo}:environment:${Domain}
 
   DeploymentPolicy:
     Type: AWS::IAM::ManagedPolicy
