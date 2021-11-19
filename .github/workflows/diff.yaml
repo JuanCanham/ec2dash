@@ -5,14 +5,19 @@ on:
       - main
 jobs:
   Diff:
+    permissions:
+      id-token: write
+      contents: read
     env:
       DOMAIN: ec2dash.juancanham.com
       AWS_DEFAULT_REGION: us-east-1
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     runs-on: ubuntu-latest
     environment: ec2dash.juancanham.com-diff
     steps:
+      - uses: aws-actions/configure-aws-credentials@master
+        with:
+          role-to-assume: arn:aws:iam::761680974830:role/ec2dash-juancanham-com-CreateDiffRole-12DXV7SUVFCEJ
+          aws-region: us-east-1
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
         with:

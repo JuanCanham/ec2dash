@@ -6,13 +6,32 @@ Parameters:
   Domain:
     Type: String
     AllowedPattern: '[a-zA-Z0-9-.]{1,63}'
+  Repo:
+    Type: String
   DeployCertificates:
     Type: String
     AllowedValues: ['true', 'false']
     Default: 'true'
+  GoogleClientId:
+    Type: String
+    Default: ''
+  GoogleSecret:
+    Type: String
+    Default: ''
+    NoEcho: true
+  FacebookClientId:
+    Type: String
+    Default: ''
+  FacebookSecret:
+    Type: String
+    Default: ''
+    NoEcho: true
+
 
 Conditions:
   DeployCertificates: !Equals [!Ref DeployCertificates, 'true']
+  Google: !Not [!Equals [!Ref GoogleSecret, '']]
+  Facebook: !Not [!Equals [!Ref FacebookSecret, '']]
 
 Resources:
   Api:
@@ -116,9 +135,9 @@ Resources:
       AllowedOAuthFlows:
         - implicit
       AllowedOAuthScopes:
-        - aws.cognito.signin.user.admin
         - openid
         - email
+        - profile
       UserPoolId: !Ref UserPool
       PreventUserExistenceErrors: ENABLED
       GenerateSecret: true
@@ -128,12 +147,42 @@ Resources:
         - !Sub https://${Domain}
       SupportedIdentityProviders:
         - COGNITO
+        - !If [Google,  Google, !Ref AWS::NoValue]
+        - !If [Facebook,  Facebook, !Ref AWS::NoValue]
 
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
     Properties:
       Domain: !Select [0, !Split [., !Ref Domain]]
       UserPoolId: !Ref UserPool
+
+  GoogleLoginProvider:
+    Condition: Google
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      UserPoolId: !Ref UserPool
+      ProviderName: Google
+      ProviderType: Google
+      ProviderDetails:
+        client_id: !Ref GoogleClientId
+        client_secret: !Ref GoogleSecret
+        authorize_scopes: profile email openid
+      AttributeMapping:
+        email: email
+
+  FacebookLoginProvider:
+    Condition: Facebook
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      UserPoolId: !Ref UserPool
+      ProviderName: Facebook
+      ProviderType: Facebook
+      ProviderDetails:
+        client_id: !Ref FacebookClientId
+        client_secret: !Ref FacebookSecret
+        authorize_scopes: public_profile,email
+      AttributeMapping:
+        email: email
 
   Bucket:
     Type: AWS::S3::Bucket
@@ -242,14 +291,34 @@ Resources:
               Action: ec2:DescribeInstances
               Resource: '*'
 
-  DeploymentUser:
-    Type: AWS::IAM::User
+  GithubOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList:
+        - a031c46782e6e6c662c2c87c76da9aa62ccabd8e
+      Url: https://token.actions.githubusercontent.com
+
+  DeploymentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          Effect: Allow
+          Principal:
+            Federated: !Ref GithubOIDCProvider
+          Action: sts:AssumeRoleWithWebIdentity
+          Condition:
+            StringEquals:
+              token.actions.githubusercontent.com:sub: !Sub repo:${Repo}:ref:refs/heads/main
 
   DeploymentPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      Users:
-        - !Ref DeploymentUser
+      Roles:
+        - !Ref DeploymentRole
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -367,6 +436,9 @@ Resources:
               - s3:CreateBucket
               - cognito-idp:CreateUserPool
               - cognito-idp:UpdateUserPool
+              - cognito-idp:CreateIdentityProvider
+              - cognito-idp:UpdateIdentityProvider
+              - cognito-idp:DeleteIdentityProvider
               - lambda:CreateFunction
               - iam:GetRole
               - iam:GetUser
@@ -378,6 +450,7 @@ Resources:
               - iam:ListPolicyTags
               - iam:ListRoleTags
               - iam:ListUserTags
+              - iam:GetOpenIDConnectProvider
             Resource: '*'
           - Effect: Allow
             Action: route53:ChangeResourceRecordSets
@@ -420,9 +493,19 @@ Resources:
               Resource: !GetAtt DescribeInstancesFunction.Arn
             - !Ref AWS::NoValue
 
-  DiffStackUser:
-    Type: AWS::IAM::User
+  CreateDiffRole:
+    Type: AWS::IAM::Role
     Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          Effect: Allow
+          Principal:
+            Federated: !Ref GithubOIDCProvider
+          Action: sts:AssumeRoleWithWebIdentity
+          Condition:
+            StringLike:
+              token.actions.githubusercontent.com:sub: !Sub repo:${Repo}:*
       Policies:
         - PolicyName: root
           PolicyDocument:
@@ -464,20 +547,13 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  - iam:CreateUser
-                  - iam:UpdateUser
-                  - iam:DeleteUser
                   - iam:CreateRole
                   - iam:UpdateRole
                   - iam:DeleteRole
                   - iam:AttachRolePolicy
                   - iam:DeleteRolePolicy
                   - iam:DetachRolePolicy
-                  - iam:AttachUserPolicy
                   - iam:PutRolePolicy
-                  - iam:DeleteUserPolicy
-                  - iam:DetachUserPolicy
-                  - iam:PutUserPolicy
                   - iam:UpdateAssumeRolePolicy
                   - iam:UpdateRoleDescription
                   - iam:CreatePolicyVersion
@@ -486,6 +562,11 @@ Resources:
                   - iam:PassRole
                   - iam:DeletePolicy
                   - iam:ListAccessKeys
+                  - iam:CreateOpenIDConnectProvider
+                  - iam:DeleteOpenIDConnectProvider
+                  - iam:UpdateOpenIDConnectProviderThumbprint
+                  - iam:AddClientIDToOpenIDConnectProvider
+                  - iam:RemoveClientIDFromOpenIDConnectProvider
                   - idp:DeleteUserPool
                   - route53:DeleteHostedZone
                   - lambda:AddPermission
@@ -530,13 +611,13 @@ Outputs:
     Value: !Ref UserPoolClient
   NameServers:
     Value: !Join ["," , !GetAtt HostedZone.NameServers]
-  DeploymentUser:
-    Value: !Ref DeploymentUser
-  DiffStackUser:
-    Value: !Ref DiffStackUser
   MainStackRole:
     Value: !GetAtt MainStackRole.Arn
   DiffStackRole:
     Value: !GetAtt DiffStackRole.Arn
   IntegrationTestStackRole:
     Value: !GetAtt IntegrationTestStackRole.Arn
+  DeploymentRole:
+    Value: !GetAtt DeploymentRole.Arn
+  CreateDiffRole:
+    Value: !GetAtt CreateDiffRole.Arn
