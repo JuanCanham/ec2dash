@@ -15,7 +15,7 @@ help:
 	@echo	'  * init DOMAIN=ec2dash.example.com - Initial setup'
 	@echo '  * diff DOMAIN=ec2dash.example.com - generate a changeset'
 	@echo '  * configure-idp DOMAIN=ec2dash.example.com PROVIDER=Google Id=123456789 SECRET=Hunter1 - configure an identity provider'
-	@echo 
+	@echo
 	@echo 'Included in all: clean install lint test package deploy sync clear-cache integration-test configure-ci'
 	@echo 'Other Targets: diff pi website cfn lint-makefile [requires docker]'
 
@@ -112,15 +112,28 @@ configure-ci:
 	yq -iy ".jobs.Diff.steps[2].with.\"role-to-assume\" = \"$(shell aws cloudformation describe-stacks \
 				--stack-name $(STACK_NAME) --query 'Stacks[0].Outputs[?OutputKey==`CreateDiffRole`].OutputValue' \
 				--output text )\"" .github/workflows/diff.yaml
-
+		
 diff: api package-cfn
-	aws cloudformation deploy --template-file packaged-cloudformation.yaml \
+	CHANGE_SET=$$(aws cloudformation create-change-set \
 		--stack-name $(STACK_NAME) \
-		--no-execute-changeset --no-fail-on-empty-changeset \
-		--capabilities CAPABILITY_IAM --parameter-overrides DeployCertificates=true  \
-		--role-arn $(shell aws cloudformation describe-stacks --stack-name $(STACK_NAME) \
+		--change-set-name diff-change-set-$(GITHUB_SHA) \
+		--template-body file://packaged-cloudformation.yaml \
+		--parameters \
+			ParameterKey=Domain,UsePreviousValue=true \
+			ParameterKey=Repo,UsePreviousValue=true \
+			ParameterKey=DeployCertificates,ParameterValue=true \
+			ParameterKey=GoogleClientId,ParameterValue=true \
+			ParameterKey=GoogleSecret,ParameterValue=true \
+			ParameterKey=FacebookClientId,ParameterValue=true \
+			ParameterKey=FacebookSecret,ParameterValue=true \
+		--output text --query Id --capabilities CAPABILITY_IAM  \
+		--role-arn $$( aws cloudformation describe-stacks \
+			--stack-name $(STACK_NAME) \
+			--output text \
 			--query 'Stacks[0].Outputs[?OutputKey==`DiffStackRole`].OutputValue' \
-			--output text )
+		)) && \
+		aws cloudformation wait change-set-create-complete --change-set-name $$CHANGE_SET && \
+		aws cloudformation describe-change-set --change-set-name $$CHANGE_SET | yq -y
 
 sync:
 	cp website/favicon.ico website/dist/favicon.ico

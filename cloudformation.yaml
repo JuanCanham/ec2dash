@@ -311,7 +311,7 @@ Resources:
             Federated: !Ref GithubOIDCProvider
           Action: sts:AssumeRoleWithWebIdentity
           Condition:
-            token.actions.githubusercontent.com:sub: !Sub repo:${Repo}:*
+            token.actions.githubusercontent.com:sub: !Sub repo:${Repo}:ref:refs/heads/main
 
   DeploymentPolicy:
     Type: AWS::IAM::ManagedPolicy
