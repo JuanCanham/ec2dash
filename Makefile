@@ -1,4 +1,4 @@
-.PHONY: help all clean install lint test package pre post api website cfn
+.PHONY: help all clean install lint test package pre post api website cfn init
 DOMAIN := ec2dash.example.com
 STACK_NAME := $(subst .,-,$(DOMAIN))
 DEPLOY_CERT = true
@@ -12,15 +12,18 @@ endif
 help:
 	@echo 'Main Targets:'
 	@echo '  * all DOMAIN=ec2dash.example.com'
-	@echo	'  * initial DOMAIN=ec2dash.example.com - Deploy the template without a certificate (see Readme)'
-	@echo 'Included in all: clean install lint test package deploy sync clear-cache integration-test'
+	@echo	'  * init DOMAIN=ec2dash.example.com - Initial setup'
+	@echo '  * diff DOMAIN=ec2dash.example.com - generate a changeset'
+	@echo '  * configure-idp DOMAIN=ec2dash.example.com PROVIDER=Google Id=123456789 SECRET=Hunter1 - configure an identity provider'
+	@echo 
+	@echo 'Included in all: clean install lint test package deploy sync clear-cache integration-test configure-ci'
 	@echo 'Other Targets: diff pi website cfn lint-makefile [requires docker]'
 
 all: pre deploy post
-initial: pre create diff sync
+init: pre create diff package-website sync configure-ci
 
 pre: install lint test package-api package-cfn
-post: package-website sync clear-cache integration-test
+post: package-website sync clear-cache integration-test configure-ci
 
 api: clean-api install-api lint-api test-api package-api
 website: install-website lint-website test-website package-website sync
@@ -88,28 +91,36 @@ create:
 	aws cloudformation deploy --template-file packaged-cloudformation.yaml \
 		--stack-name $(STACK_NAME) \
 		--parameter-overrides Domain=$(DOMAIN) DeployCertificates=false \
+		Repo=$(shell git remote -v | head -n 1 | cut -d '.' -f 2 | cut -c 5- | cut -d . -f 1) \
 		--no-fail-on-empty-changeset --capabilities CAPABILITY_IAM
 
 deploy:
 	aws cloudformation deploy --template-file packaged-cloudformation.yaml \
 		--stack-name $(STACK_NAME) \
-		--parameter-overrides Domain=$(DOMAIN) DeployCertificates=$(DEPLOY_CERT) \
 		--no-fail-on-empty-changeset --capabilities CAPABILITY_IAM $(CI_DEPLOY_ROLE)
-		
-diff: api package-cfn
-	CHANGE_SET=$$(aws cloudformation create-change-set \
+
+configure-idp: api package-cfn
+	aws cloudformation deploy --template-file packaged-cloudformation.yaml \
 		--stack-name $(STACK_NAME) \
-		--change-set-name diff-change-set-$(GITHUB_SHA) \
-		--template-body file://packaged-cloudformation.yaml \
-		--parameters ParameterKey=Domain,UsePreviousValue=true ParameterKey=DeployCertificates,ParameterValue=true \
-		--output text --query Id --capabilities CAPABILITY_IAM  \
-		--role-arn $$( aws cloudformation describe-stacks \
-			--stack-name $(STACK_NAME) \
-			--output text \
+		--parameter-overrides $(PROVIDER)ClientId=$(ID) $(PROVIDER)Secret=$(SECRET) \
+		--no-fail-on-empty-changeset --capabilities CAPABILITY_IAM --no-execute-changeset
+
+configure-ci:
+	yq -iy ".jobs.Deploy.steps[2].with.\"role-to-assume\" = \"$(shell aws cloudformation describe-stacks \
+				--stack-name $(STACK_NAME) --query 'Stacks[0].Outputs[?OutputKey==`DeploymentRole`].OutputValue' \
+				--output text )\"" .github/workflows/main.yaml
+	yq -iy ".jobs.Diff.steps[2].with.\"role-to-assume\" = \"$(shell aws cloudformation describe-stacks \
+				--stack-name $(STACK_NAME) --query 'Stacks[0].Outputs[?OutputKey==`CreateDiffRole`].OutputValue' \
+				--output text )\"" .github/workflows/diff.yaml
+
+diff: api package-cfn
+	aws cloudformation deploy --template-file packaged-cloudformation.yaml \
+		--stack-name $(STACK_NAME) \
+		--no-execute-changeset --no-fail-on-empty-changeset \
+		--capabilities CAPABILITY_IAM --parameter-overrides DeployCertificates=true  \
+		--role-arn $(shell aws cloudformation describe-stacks --stack-name $(STACK_NAME) \
 			--query 'Stacks[0].Outputs[?OutputKey==`DiffStackRole`].OutputValue' \
-		)) && \
-		aws cloudformation wait change-set-create-complete --change-set-name $$CHANGE_SET && \
-		aws cloudformation describe-change-set --change-set-name $$CHANGE_SET | yq -y
+			--output text )
 
 sync:
 	cp website/favicon.ico website/dist/favicon.ico
@@ -124,7 +135,3 @@ clear-cache:
 
 integration-test:
 	behave tests/
-	
-lint-makefile:
-	docker run --rm -v $(pwd):/data cytopia/checkmake Makefile
-

@@ -1,16 +1,16 @@
 name: deploy ec2dash.juancanham.com
-on:
+'true':
   push:
     branches:
       - main
 jobs:
-  Build-Deploy-Integrtion-Test:
+  Deploy:
+    permissions:
+      id-token: write
+      contents: read
     env:
       MOZ_HEADLESS: 1
       DOMAIN: ec2dash.juancanham.com
-      AWS_DEFAULT_REGION: us-east-1
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     runs-on: ubuntu-latest
     environment: ec2dash.juancanham.com
     concurrency: ec2dash.juancanham.com
@@ -19,11 +19,12 @@ jobs:
       - uses: actions/setup-python@v2
         with:
           python-version: 3.9
+      - uses: aws-actions/configure-aws-credentials@@v1
+        with:
+          role-to-assume: arn:aws:iam::761680974830:role/ec2dash-juancanham-com-DeploymentRole-GC1IXP2ZAXRS
+          aws-region: us-east-1
       - run: make all DOMAIN=$DOMAIN
       - name: Revert last commit due to failure
         if: ${{ failure() }}
-        run: |
-          if $(git log -1 | grep revert); then
-            git revert HEAD
-            git push
-          fi
+        run: "if $(git log -1 | grep revert); then\n  git revert HEAD\n  git push\n\
+          fi\n"

@@ -1,15 +1,16 @@
 name: Create Change Set for ec2dash.juancanham.com
-on:
+'true':
   pull_request:
     branches:
       - main
 jobs:
   Diff:
+    permissions:
+      id-token: write
+      contents: read
     env:
       DOMAIN: ec2dash.juancanham.com
       AWS_DEFAULT_REGION: us-east-1
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     runs-on: ubuntu-latest
     environment: ec2dash.juancanham.com-diff
     steps:
@@ -17,4 +18,8 @@ jobs:
       - uses: actions/setup-python@v2
         with:
           python-version: 3.9
+      - uses: aws-actions/configure-aws-credentials@@v1
+        with:
+          role-to-assume: arn:aws:iam::761680974830:role/ec2dash-juancanham-com-CreateDiffRole-12DXV7SUVFCEJ
+          aws-region: us-east-1
       - run: make diff DOMAIN=$DOMAIN
