@@ -311,7 +311,8 @@ Resources:
             Federated: !Ref GithubOIDCProvider
           Action: sts:AssumeRoleWithWebIdentity
           Condition:
-            token.actions.githubusercontent.com:sub: !Sub repo:${Repo}:ref:refs/heads/main
+            StringEquals:
+              token.actions.githubusercontent.com:sub: !Sub repo:${Repo}:ref:refs/heads/main
 
   DeploymentPolicy:
     Type: AWS::IAM::ManagedPolicy
@@ -503,7 +504,8 @@ Resources:
             Federated: !Ref GithubOIDCProvider
           Action: sts:AssumeRoleWithWebIdentity
           Condition:
-            token.actions.githubusercontent.com:sub: !Sub repo:${Repo}:*
+            StringLike:
+              token.actions.githubusercontent.com:sub: !Sub repo:${Repo}:*
       Policies:
         - PolicyName: root
           PolicyDocument:
