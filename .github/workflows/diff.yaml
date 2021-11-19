@@ -14,12 +14,12 @@ jobs:
     runs-on: ubuntu-latest
     environment: ec2dash.juancanham.com-diff
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
-        with:
-          python-version: 3.9
       - uses: aws-actions/configure-aws-credentials@v1
         with:
           role-to-assume: arn:aws:iam::761680974830:role/ec2dash-juancanham-com-CreateDiffRole-12DXV7SUVFCEJ
           aws-region: us-east-1
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
       - run: make diff DOMAIN=$DOMAIN

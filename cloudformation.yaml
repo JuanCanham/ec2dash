@@ -294,8 +294,10 @@ Resources:
   GithubOIDCProvider:
     Type: AWS::IAM::OIDCProvider
     Properties:
+      ClientIdList:
+        - sts.amazonaws.com
       ThumbprintList:
-        - 66BDD7C74D920085F0A986FB5AE3AB4FACCAF635
+        - a031c46782e6e6c662c2c87c76da9aa62ccabd8e
       Url: https://token.actions.githubusercontent.com
 
   DeploymentRole:
@@ -309,11 +311,7 @@ Resources:
             Federated: !Ref GithubOIDCProvider
           Action: sts:AssumeRoleWithWebIdentity
           Condition:
-            StringEquals:
-              token.actions.githubusercontent.com:aud: !Sub
-                - https://github.com/${org}
-                - org: !Select [0, !Split ['/', !Ref Repo]]
-              token.actions.githubusercontent.com:sub: !Sub repo:${Repo}:ref:refs/heads/main
+            token.actions.githubusercontent.com:sub: !Sub repo:${Repo}:*
 
   DeploymentPolicy:
     Type: AWS::IAM::ManagedPolicy
@@ -451,6 +449,7 @@ Resources:
               - iam:ListPolicyTags
               - iam:ListRoleTags
               - iam:ListUserTags
+              - iam:GetOpenIDConnectProvider
             Resource: '*'
           - Effect: Allow
             Action: route53:ChangeResourceRecordSets
@@ -504,12 +503,7 @@ Resources:
             Federated: !Ref GithubOIDCProvider
           Action: sts:AssumeRoleWithWebIdentity
           Condition:
-            StringEquals:
-              token.actions.githubusercontent.com:aud: !Sub
-                - https://github.com/${org}
-                - org: !Select [0, !Split ['/', !Ref Repo]]
-            StringLike:
-              token.actions.githubusercontent.com:sub: !Sub repo:${Repo}:ref:refs/heads/*
+            token.actions.githubusercontent.com:sub: !Sub repo:${Repo}:*
       Policies:
         - PolicyName: root
           PolicyDocument:
@@ -569,6 +563,8 @@ Resources:
                   - iam:CreateOpenIDConnectProvider
                   - iam:DeleteOpenIDConnectProvider
                   - iam:UpdateOpenIDConnectProviderThumbprint
+                  - iam:AddClientIDToOpenIDConnectProvider
+                  - iam:RemoveClientIDFromOpenIDConnectProvider
                   - idp:DeleteUserPool
                   - route53:DeleteHostedZone
                   - lambda:AddPermission
