@@ -106,10 +106,10 @@ configure-idp: api package-cfn
 		--no-fail-on-empty-changeset --capabilities CAPABILITY_IAM --no-execute-changeset
 
 configure-ci:
-	yq -iy ".jobs.Deploy.steps[2].with.\"role-to-assume\" = \"$(shell aws cloudformation describe-stacks \
+	yq -iy ".jobs.Deploy.steps[0].with.\"role-to-assume\" = \"$(shell aws cloudformation describe-stacks \
 				--stack-name $(STACK_NAME) --query 'Stacks[0].Outputs[?OutputKey==`DeploymentRole`].OutputValue' \
 				--output text )\"" .github/workflows/main.yaml
-	yq -iy ".jobs.Diff.steps[2].with.\"role-to-assume\" = \"$(shell aws cloudformation describe-stacks \
+	yq -iy ".jobs.Diff.steps[0].with.\"role-to-assume\" = \"$(shell aws cloudformation describe-stacks \
 				--stack-name $(STACK_NAME) --query 'Stacks[0].Outputs[?OutputKey==`CreateDiffRole`].OutputValue' \
 				--output text )\"" .github/workflows/diff.yaml
 		
