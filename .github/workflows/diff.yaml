@@ -1,5 +1,5 @@
 name: Create Change Set for ec2dash.juancanham.com
-'true':
+on:
   pull_request:
     branches:
       - main
@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-python@v2
         with:
           python-version: 3.9
-      - uses: aws-actions/configure-aws-credentials@@v1
+      - uses: aws-actions/configure-aws-credentials@v1
         with:
           role-to-assume: arn:aws:iam::761680974830:role/ec2dash-juancanham-com-CreateDiffRole-12DXV7SUVFCEJ
           aws-region: us-east-1
