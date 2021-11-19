@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ec2dash.juancanham.com-diff
     steps:
-      - uses: aws-actions/configure-aws-credentials@v1
+      - uses: aws-actions/configure-aws-credentials@master
         with:
           role-to-assume: arn:aws:iam::761680974830:role/ec2dash-juancanham-com-CreateDiffRole-12DXV7SUVFCEJ
           aws-region: us-east-1
