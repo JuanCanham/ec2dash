@@ -107,11 +107,11 @@ configure-idp: api package-cfn
 
 configure-ci:
 	yq -iy ".jobs.Deploy.steps[0].with.\"role-to-assume\" = \"$(shell aws cloudformation describe-stacks \
-				--stack-name $(STACK_NAME) --query 'Stacks[0].Outputs[?OutputKey==`DeploymentRole`].OutputValue' \
-				--output text )\"" .github/workflows/main.yaml
+		--stack-name $(STACK_NAME) --query 'Stacks[0].Outputs[?OutputKey==`DeploymentRole`].OutputValue' \
+		--output text )\"" .github/workflows/main.yaml
 	yq -iy ".jobs.Diff.steps[0].with.\"role-to-assume\" = \"$(shell aws cloudformation describe-stacks \
-				--stack-name $(STACK_NAME) --query 'Stacks[0].Outputs[?OutputKey==`CreateDiffRole`].OutputValue' \
-				--output text )\"" .github/workflows/diff.yaml
+		--stack-name $(STACK_NAME) --query 'Stacks[0].Outputs[?OutputKey==`CreateDiffRole`].OutputValue' \
+		--output text )\"" .github/workflows/diff.yaml
 		
 diff: api package-cfn
 	CHANGE_SET=$$(aws cloudformation create-change-set \
