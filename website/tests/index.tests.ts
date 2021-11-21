@@ -351,7 +351,8 @@ describe('index tests', () => {
     });
 
     const ajaxParams = {
-      success: (_response: any) => {
+      success: (response: any) => {
+        console.log('got response, but should not have', response);
         expect(false).eql(true);
       },
     };
@@ -381,7 +382,7 @@ describe('index tests', () => {
   it('login works', async () => {
     const loginStub = stub();
     document.getElementById('loginLink').onclick = loginStub;
-    login()
+    login();
     expect(loginStub.callCount).eq(1);
   });
 });
