@@ -1,5 +1,5 @@
 name: deploy ec2dash.juancanham.com
-on:
+'on':
   push:
     branches:
       - main

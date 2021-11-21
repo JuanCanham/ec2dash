@@ -37,6 +37,8 @@ const logout = () => {
   localStorage.removeItem('Authorization');
 };
 
+const login = () => document.getElementById('loginLink').click();
+
 const readCredentials = (authString: string) => {
   if (authString.includes('id_token')) {
     localStorage.setItem(
@@ -51,9 +53,10 @@ const readCredentials = (authString: string) => {
 const parseApiResponse = (response: Response) => {
   if (!response.ok) {
     if (response.status >= 400 && response.status < 500) {
-      logout();
       console.warn(`Cannot get data as not logged in: ${response.status}`);
-      return { Instances: [] as string[] };
+      logout();
+      login();
+      throw Error('Not Authenticated');
     }
   }
   return response.json();
@@ -66,11 +69,13 @@ const parseJsonResponse = (
   search: URLSearchParams,
 ) => {
   setLoggedInElementsVisibility(true);
-  body.Instances.map((Instance) => data.push({
-    ...Instance,
-    PrivateIps: Instance.PrivateIps.join('\n'),
-    PublicIps: Instance.PublicIps.join('\n'),
-  }));
+  body.Instances.forEach((Instance) => {
+    data.push({
+      ...Instance,
+      PrivateIps: Instance.PrivateIps.join('\n'),
+      PublicIps: Instance.PublicIps.join('\n'),
+    });
+  });
   if ('NextToken' in body) {
     search.set('NextToken', body.NextToken);
   } else {
@@ -79,23 +84,28 @@ const parseJsonResponse = (
   }
 };
 
-const fetchAllData = (params: AjaxParms) => {
+const fetchAllData = async (params: AjaxParms) => {
   const data: RowData[] = [];
   const search = new URLSearchParams({ MaxResults: '1000' });
-  do {
-    fetch(`https://{{API_DOMAIN}}/?${search}`, {
-      headers: [['Authorization', localStorage.getItem('Authorization')]],
-    })
-      .then(parseApiResponse)
-      .then((body) => {
-        parseJsonResponse(body, data, params, search);
-      });
-  } while ('NextToken' in search.keys());
+  try {
+    do {
+      /* eslint-disable no-await-in-loop */
+      await fetch(`https://{{API_DOMAIN}}/?${search}`, {
+        headers: [['Authorization', localStorage.getItem('Authorization')]],
+      })
+        .then(parseApiResponse)
+        .then((body) => {
+          parseJsonResponse(body, data, params, search);
+        });
+    } while (search.has('NextToken'));
+  } catch {
+    console.error('Error accessing API');
+  }
 };
 
-function ajaxRequest(params: AjaxParms) {
+async function ajaxRequest(params: AjaxParms) {
   readCredentials(window.location.hash);
-  fetchAllData(params);
+  await fetchAllData(params);
 }
 
 function buttons() {
@@ -111,6 +121,7 @@ function buttons() {
 export {
   setLoggedInElementsVisibility,
   logout,
+  login,
   readCredentials,
   parseApiResponse,
   parseJsonResponse,

@@ -14,6 +14,7 @@ import {
   Instance,
   RowData,
   AjaxParms,
+  login,
 } from '../src/index';
 
 const jsdon = require('jsdom');
@@ -144,9 +145,13 @@ describe('index tests', () => {
       status: 400,
     };
 
-    const result = await parseApiResponse(response as Response);
-    expect(result).eql({ Instances: [] });
-    expect(localStorage.getItem('Authorization')).eq(null);
+    try {
+      await parseApiResponse(response as Response);
+    } catch {
+      expect(localStorage.getItem('Authorization')).eq(null);
+      return;
+    }
+    expect(false).eq(true);
   });
 
   it('parseApiResponse handles non-auth failure', async () => {
@@ -265,13 +270,29 @@ describe('index tests', () => {
   it('fetchAllData handles no pagination', async () => {
     fetchStub.resolves(apiResponse);
 
-    fetchAllData(mockAjaxParams);
+    const ajaxParams = {
+      success: (response: any) => {
+        expect(response).eql([
+          {
+            Name: 'Name',
+            Id: 'i-1',
+            Type: 'small',
+            State: 'running',
+            AZ: 'us-east-1',
+            PublicIps: '192.168.0.1\n192.168.0.2',
+            PrivateIps: '8.8.8.8',
+          },
+          exampleRow,
+        ]);
+      },
+    };
+
+    await fetchAllData(ajaxParams);
 
     expect(fetchStub.callCount).eq(1);
   });
 
-  // mocking not resolving
-  it.skip('fetchAllData handles pagination', async () => {
+  it('fetchAllData handles pagination', async () => {
     fetchStub.onFirstCall().resolves({
       ...apiResponse,
       json: () => ({ ...jsonResponse, NextToken: 'page-2' }),
@@ -280,43 +301,68 @@ describe('index tests', () => {
       ...apiResponse,
       json: () => ({
         Instances: [
-          { ...exampleRow, Id: 'i-3' },
-          { ...exampleRow, Id: 'i-4' },
+          { ...exampleInstance, Id: 'i-3' },
+          { ...exampleInstance, Id: 'i-4' },
         ],
-        NextToken: 'page-2',
+        NextToken: 'page-3',
       }),
     });
     fetchStub.onThirdCall().resolves({
       ...apiResponse,
       json: () => ({
         Instances: [
-          { ...exampleRow, Id: 'i-5' },
-          { ...exampleRow, Id: 'i-6' },
+          { ...exampleInstance, Id: 'i-5' },
+          { ...exampleInstance, Id: 'i-6' },
         ],
       }),
     });
 
-    fetchAllData(mockAjaxParams);
-
-    expect(fetchStub.callCount).eq(3);
-    expect(ajaxSuccessStub.callCount).eq(1);
-    expect(ajaxSuccessStub.firstCall.args[0]).eql([
-      {
-        Name: 'Name',
-        Id: 'i-1',
-        Type: 'small',
-        State: 'running',
-        AZ: 'us-east-1',
-        PublicIps: '192.168.0.1\n192.168.0.2',
-        PrivateIps: '8.8.8.8',
+    const ajaxParams = {
+      success: (response: any) => {
+        expect(response).eql([
+          {
+            Name: 'Name',
+            Id: 'i-1',
+            Type: 'small',
+            State: 'running',
+            AZ: 'us-east-1',
+            PublicIps: '192.168.0.1\n192.168.0.2',
+            PrivateIps: '8.8.8.8',
+          },
+          exampleRow,
+          { ...exampleRow, Id: 'i-3' },
+          { ...exampleRow, Id: 'i-4' },
+          { ...exampleRow, Id: 'i-5' },
+          { ...exampleRow, Id: 'i-6' },
+        ]);
       },
-      exampleRow,
-      { ...exampleRow, Id: 'i-3' },
-      { ...exampleRow, Id: 'i-4' },
-      { ...exampleRow, Id: 'i-5' },
-      { ...exampleRow, Id: 'i-6' },
-    ]);
+    };
+
+    await fetchAllData(ajaxParams);
   });
+
+  it('fetchAllData logsout on auth failure pagination', async () => {
+    const loginStub = stub();
+    localStorage.setItem('Authorization', 'Hunter1');
+    document.getElementById('loginLink').onclick = loginStub;
+    fetchStub.resolves({
+      ok: false,
+      status: 400,
+    });
+
+    const ajaxParams = {
+      success: (_response: any) => {
+        expect(false).eql(true);
+      },
+    };
+
+    await fetchAllData(ajaxParams);
+
+    expect(fetchStub.callCount).eq(1);
+    expect(loginStub.callCount).eq(1);
+    expect(localStorage.getItem('Authorization')).eq(null);
+  });
+
   it('ajaxRequest behaves as expected', async () => {
     global.window.location.hash = 'id_token=Hunter1';
     fetchStub.resolves(apiResponse);
@@ -330,5 +376,12 @@ describe('index tests', () => {
   it('buttons returns expected buttons', async () => {
     const result = buttons();
     expect('btnLogOut' in result).eq(true);
+  });
+
+  it('login works', async () => {
+    const loginStub = stub();
+    document.getElementById('loginLink').onclick = loginStub;
+    login()
+    expect(loginStub.callCount).eq(1);
   });
 });
