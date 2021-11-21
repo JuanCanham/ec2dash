@@ -13,7 +13,7 @@ def before_all(context):
 
     context.domain = os.environ["DOMAIN"]
     context.user_name = f"test-example@{context.domain}"
-    context.dashboard = f"https://{context.domain}/"
+    context.dashboard = f"https://{context.domain}"
 
     context.api = f"https://api.{context.domain}"
     context.webdriver = webdriver.Firefox(
@@ -44,8 +44,8 @@ def cleanup_user(context):
         context.cognito.admin_delete_user(
             UserPoolId=context.user_pool_id, Username=context.user_name
         )
-    except Exception as error:
-        print(f"User not deleted as {error}")
+    except context.cognito.exceptions.UserNotFoundException:
+        """Ignore if user doesnt exist"""
 
 
 def gen_password(length: int):
