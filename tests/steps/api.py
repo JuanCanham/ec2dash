@@ -14,7 +14,7 @@ def step_impl(context):
 
 
 @then("The API shows the instance as {state}")
-def step_impl(context, state):
+def step_impl(context, state: str):
     instance_state = [
         inst["State"]
         for inst in get_instances(context)
@@ -31,5 +31,5 @@ def get_instances(context):
     assert res.status_code == 200
     json = res.json()
     assert "Instances" in json
-    assert type(json["Instances"]) is list
+    assert isinstance(json["Instances"], list)
     return json["Instances"]

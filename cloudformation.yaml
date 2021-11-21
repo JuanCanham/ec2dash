@@ -30,8 +30,8 @@ Parameters:
 
 Conditions:
   DeployCertificates: !Equals [!Ref DeployCertificates, 'true']
-  Google: !Not [!Equals [!Ref GoogleSecret, '']]
-  Facebook: !Not [!Equals [!Ref FacebookSecret, '']]
+  Google: !Not [!Equals [!Ref GoogleClientId, '']]
+  Facebook: !Not [!Equals [!Ref FacebookClientId, '']]
 
 Resources:
   Api:
@@ -147,8 +147,8 @@ Resources:
         - !Sub https://${Domain}
       SupportedIdentityProviders:
         - COGNITO
-        - !If [Google,  Google, !Ref AWS::NoValue]
-        - !If [Facebook,  Facebook, !Ref AWS::NoValue]
+        - !If [Google,  !Select [0, !Split [Login, !Ref GoogleLoginProvider]], !Ref AWS::NoValue]
+        - !If [Facebook,  !Select [0, !Split [Login, !Ref FacebookLoginProvider]], !Ref AWS::NoValue]
 
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain

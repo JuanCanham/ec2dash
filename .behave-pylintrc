@@ -1,0 +1,14 @@
+[MASTER]
+
+jobs=0
+
+[MESSAGES CONTROL]
+
+disable= C0114, C0116, E0102, E0611, W0105
+
+[REFACTORING]
+
+max-nested-blocks=3
+
+[STRING]
+check-quote-consistency=yes

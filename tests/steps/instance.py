@@ -1,27 +1,30 @@
 from pathlib import Path, PurePath
 from behave import given, when
+from botocore.exceptions import ClientError
 
 
 @given("an instance is created")
 def step_impl(context):
     try:
         context.cloudformation.describe_stacks(StackName=context.test_stack_name)
-    except Exception:
+    except ClientError:
         print(
             f"Creating Cloudformation stack with instnace ({context.test_stack_name})"
         )
-        create_response = context.cloudformation.create_stack(
-            StackName=context.test_stack_name,
-            TemplateBody=open(
-                Path(PurePath(__file__).parent, "instance_cloudformation.yaml"),
-                "r",
-                encoding="utf-8",
-            ).read(),
-            ResourceTypes=["AWS::EC2::Instance"],
-            RoleARN=get_stack_output(
-                context, context.main_stack_name, "IntegrationTestStackRole"
-            ),
-        )
+
+        with open(
+            Path(PurePath(__file__).parent, "instance_cloudformation.yaml"),
+            "r",
+            encoding="utf-8",
+        ) as template_file:
+            create_response = context.cloudformation.create_stack(
+                StackName=context.test_stack_name,
+                TemplateBody=template_file.read(),
+                ResourceTypes=["AWS::EC2::Instance"],
+                RoleARN=get_stack_output(
+                    context, context.main_stack_name, "IntegrationTestStackRole"
+                ),
+            )
         context.stack_id = create_response["StackId"]
         print(f"Waiting on Cloudformation stack completion ({context.stack_id})")
         waiter = context.cloudformation.get_waiter("stack_create_complete")
@@ -63,7 +66,7 @@ def step_impl(context):
     waiter.wait(StackName=context.test_stack_name)
 
 
-def get_stack_output(context, stack_name, key):
+def get_stack_output(context, stack_name: str, key: str):
     describe_response = context.cloudformation.describe_stacks(StackName=stack_name)
     value = [
         out["OutputValue"]

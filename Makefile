@@ -55,6 +55,7 @@ lint-api:
 	cd api && \
 	pylint src/*.py && \
 	mypy --ignore-missing-imports src/
+	pylint --rcfile=.behave-pylintrc tests/
 
 lint-website:
 	cd website && npm run lint
@@ -99,7 +100,9 @@ deploy:
 		--stack-name $(STACK_NAME) \
 		--no-fail-on-empty-changeset --capabilities CAPABILITY_IAM $(CI_DEPLOY_ROLE)
 
-configure-idp: api package-cfn
+configure-idp: api package-cfn deploy-configure-idp integration-test
+
+deploy-configure-idp:
 	aws cloudformation deploy --template-file packaged-cloudformation.yaml \
 		--stack-name $(STACK_NAME) \
 		--parameter-overrides $(PROVIDER)ClientId=$(ID) $(PROVIDER)Secret=$(SECRET) \

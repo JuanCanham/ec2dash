@@ -114,6 +114,9 @@ function buttons() {
       text: 'Log Out',
       icon: 'bi-box-arrow-right',
       event: logout,
+      attributes: {
+        title: 'Log Out',
+      },
     },
   };
 }
