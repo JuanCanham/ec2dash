@@ -1,6 +1,6 @@
 import time
 from behave import then
-from tests.steps.auth import check_dashboard_is_visible
+from steps.auth import check_dashboard_is_visible
 
 
 @then("The dashboard does not show the login button")
