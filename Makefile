@@ -103,7 +103,7 @@ configure-idp: api package-cfn
 	aws cloudformation deploy --template-file packaged-cloudformation.yaml \
 		--stack-name $(STACK_NAME) \
 		--parameter-overrides $(PROVIDER)ClientId=$(ID) $(PROVIDER)Secret=$(SECRET) \
-		--no-fail-on-empty-changeset --capabilities CAPABILITY_IAM --no-execute-changeset
+		--no-fail-on-empty-changeset --capabilities CAPABILITY_IAM
 
 configure-ci:
 	yq -iy ".jobs.Deploy.steps[0].with.\"role-to-assume\" = \"$(shell aws cloudformation describe-stacks \
@@ -122,10 +122,10 @@ diff: api package-cfn
 			ParameterKey=Domain,UsePreviousValue=true \
 			ParameterKey=Repo,UsePreviousValue=true \
 			ParameterKey=DeployCertificates,ParameterValue=true \
-			ParameterKey=GoogleClientId,ParameterValue=true \
-			ParameterKey=GoogleSecret,ParameterValue=true \
-			ParameterKey=FacebookClientId,ParameterValue=true \
-			ParameterKey=FacebookSecret,ParameterValue=true \
+			ParameterKey=GoogleClientId,UsePreviousValue=true \
+			ParameterKey=GoogleSecret,UsePreviousValue=true \
+			ParameterKey=FacebookClientId,UsePreviousValue=true \
+			ParameterKey=FacebookSecret,UsePreviousValue=true \
 		--output text --query Id --capabilities CAPABILITY_IAM  \
 		--role-arn $$( aws cloudformation describe-stacks \
 			--stack-name $(STACK_NAME) \
